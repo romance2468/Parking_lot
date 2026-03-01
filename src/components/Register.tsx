@@ -1,28 +1,30 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { authAPI } from '../api';
-import { LoginCredentials } from '../types';
+import { LoginCredentials, RegisterData } from '../types';
 
-const Login: React.FC = () => {
+const Register: React.FC = () => {
   const navigate = useNavigate();
+  const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
   const [error, setError] = useState('');
-  const [rememberMe, setRememberMe] = useState(false);
+  const [success, setSuccess] = useState(false);
   const [loading, setLoading] = useState(false);
 
-  // Create more visible bubbles
+  // Create bubbles (same as login page)
   const [bubbles, setBubbles] = useState<Array<{ id: number; size: number; left: number; duration: number; delay: number }>>([]);
 
-  useEffect(() => {
-    // Generate more bubbles with better visibility
+  React.useEffect(() => {
+    // Generate bubbles (same as login page)
     const newBubbles = [];
-    for (let i = 0; i < 40; i++) { // More bubbles
+    for (let i = 0; i < 40; i++) {
       newBubbles.push({
         id: i,
-        size: Math.random() * 50 + 25, // Bigger: 25-75px
+        size: Math.random() * 50 + 25,
         left: Math.random() * 100,
-        duration: Math.random() * 25 + 20, // 20-45 seconds
+        duration: Math.random() * 25 + 20,
         delay: Math.random() * 8
       });
     }
@@ -32,8 +34,19 @@ const Login: React.FC = () => {
 const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
-    if (!email || !password) {
+    // Validation
+    if (!name || !email || !password || !confirmPassword) {
       setError('Пожалуйста, заполните все поля');
+      return;
+    }
+
+    if (password !== confirmPassword) {
+      setError('Пароли не совпадают');
+      return;
+    }
+
+    if (password.length < 6) {
+      setError('Пароль должен быть не менее 6 символов');
       return;
     }
 
@@ -41,42 +54,33 @@ const handleSubmit = async (e: React.FormEvent) => {
     setError('');
     
     try {
-      const credentials: LoginCredentials = {
+      const credentials: RegisterData = {
         email,
-        password
+        password,
+        name
       };
       
-      const response = await authAPI.login(credentials);
-      
-      localStorage.setItem('token', response.data.token);
-      localStorage.setItem('user', JSON.stringify(response.data.user));
-      
-      if (rememberMe) {
-        localStorage.setItem('rememberedEmail', email);
-      } else {
-        localStorage.removeItem('rememberedEmail');
+      const response = await authAPI.register(credentials);
+      const { token, user } = response.data;
+      if (!token || !user?.id) {
+        setError('Ошибка: не получены данные пользователя');
+        setLoading(false);
+        return;
       }
-      
+      localStorage.setItem('token', token);
+      localStorage.setItem('user', JSON.stringify(user));
       setLoading(false);
-      navigate('/car-details');
+      setSuccess(true);
+      navigate('/car-details', { state: { fromRegister: true, token, userId: user.id } });
     } catch (err: any) {
       setLoading(false);
-      setError(err.response?.data?.error || 'Неверный email или пароль');
+      setError(err.response?.data?.error || 'Ошибка регистрации');
     }
   };
 
-// Load remembered email
-  useEffect(() => {
-    const remembered = localStorage.getItem('rememberedEmail');
-    if (remembered) {
-      setEmail(remembered);
-      setRememberMe(true);
-    }
-  }, []);
-
   return (
-    <div className="login-page">
-      {/* Gray #8 Background with More Visible Bubbles */}
+    <div className="register-page">
+      {/* Gray #8 Background with Bubbles */}
       <div className="gray-bg">
         {bubbles.map((bubble) => (
           <div
@@ -93,10 +97,10 @@ const handleSubmit = async (e: React.FormEvent) => {
         ))}
       </div>
       
-      {/* Login Card */}
-      <div className="login-container">
-        <div className="login-card">
-          {/* Big Animated Logo */}
+      {/* Register Card */}
+      <div className="register-container">
+        <div className="register-card">
+          {/* Logo */}
           <div className="logo-container">
             <div className="logo-circle">
               <svg width="80" height="80" viewBox="0 0 80 80" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -114,7 +118,7 @@ const handleSubmit = async (e: React.FormEvent) => {
             </div>
           </div>
 
-          <h2 className="login-title">Вход в систему</h2>
+          <h2 className="register-title">Регистрация</h2>
           
           {error && (
             <div className="error-message">
@@ -123,7 +127,25 @@ const handleSubmit = async (e: React.FormEvent) => {
             </div>
           )}
 
+          {success && (
+            <div className="success-message">
+              <span className="success-icon">✓</span>
+              Регистрация прошла успешно! Теперь введите данные автомобиля.
+            </div>
+          )}
+
           <form onSubmit={handleSubmit}>
+            <div className="form-group">
+              <label>Имя</label>
+              <input
+                type="text"
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                placeholder="Введите ваше имя"
+                required
+              />
+            </div>
+
             <div className="form-group">
               <label>Электронная почта</label>
               <input
@@ -142,33 +164,30 @@ const handleSubmit = async (e: React.FormEvent) => {
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 placeholder="••••••••"
+                minLength={6}
                 required
               />
             </div>
 
-            <div className="form-options">
-              <label className="remember-me">
-                <input
-                  type="checkbox"
-                  checked={rememberMe}
-                  onChange={(e) => setRememberMe(e.target.checked)}
-                />
-                <span>Запомнить меня</span>
-              </label>
-              <a href="#" className="forgot-link">Забыли пароль?</a>
+            <div className="form-group">
+              <label>Подтвердите пароль</label>
+              <input
+                type="password"
+                value={confirmPassword}
+                onChange={(e) => setConfirmPassword(e.target.value)}
+                placeholder="••••••••"
+                minLength={6}
+                required
+              />
             </div>
 
-            <button type="submit" className="login-button">
-              Войти
+            <button type="submit" className="register-button" disabled={success || loading}>
+              {loading ? 'Регистрация...' : success ? 'Регистрация успешна!' : 'Зарегистрироваться'}
             </button>
           </form>
 
-          <div className="temp-login-note">
-            ⚡ Временный вход: любые email и пароль
-          </div>
-
-          <div className="register-link">
-            Нет аккаунта? <a href="#">Свяжитесь с администратором</a>
+          <div className="login-link">
+            Уже есть аккаунт? <a href="#" onClick={() => navigate('/login')}>Войти</a>
           </div>
         </div>
       </div>
@@ -184,7 +203,7 @@ const handleSubmit = async (e: React.FormEvent) => {
           font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
         }
 
-        .login-page {
+        .register-page {
           min-height: 100vh;
           position: relative;
           display: flex;
@@ -193,14 +212,14 @@ const handleSubmit = async (e: React.FormEvent) => {
           overflow: hidden;
         }
 
-        /* Gray #8 Background with More Visible Bubbles */
+        /* Gray #8 Background with Bubbles */
         .gray-bg {
           position: absolute;
           top: 0;
           left: 0;
           right: 0;
           bottom: 0;
-          background: #b8c3d4; /* Color #8 - Darker gray */
+          background: #b8c3d4;
           z-index: 1;
           overflow: hidden;
         }
@@ -208,18 +227,18 @@ const handleSubmit = async (e: React.FormEvent) => {
         .bubble {
           position: absolute;
           bottom: -100px;
-          background: rgba(37, 99, 235, 0.15); /* More opaque */
+          background: rgba(37, 99, 235, 0.15);
           border-radius: 50%;
           pointer-events: none;
           animation: floatUp linear infinite;
-          border: 2px solid rgba(37, 99, 235, 0.25); /* Thicker border */
-          box-shadow: 0 0 40px rgba(37, 99, 235, 0.2); /* Stronger glow */
+          border: 2px solid rgba(37, 99, 235, 0.25);
+          box-shadow: 0 0 40px rgba(37, 99, 235, 0.2);
         }
 
         @keyframes floatUp {
           0% {
             transform: translateY(0) scale(1);
-            opacity: 0.9; /* More visible */
+            opacity: 0.9;
           }
           100% {
             transform: translateY(-120vh) scale(1.3);
@@ -227,7 +246,7 @@ const handleSubmit = async (e: React.FormEvent) => {
           }
         }
 
-        .login-container {
+        .register-container {
           position: relative;
           z-index: 10;
           width: 100%;
@@ -235,7 +254,7 @@ const handleSubmit = async (e: React.FormEvent) => {
           padding: 20px;
         }
 
-        .login-card {
+        .register-card {
           background: white;
           border-radius: 30px;
           padding: 40px;
@@ -255,7 +274,7 @@ const handleSubmit = async (e: React.FormEvent) => {
           }
         }
 
-        /* Big Animated Logo */
+        /* Logo */
         .logo-container {
           display: flex;
           flex-direction: column;
@@ -299,7 +318,7 @@ const handleSubmit = async (e: React.FormEvent) => {
           color: #2563eb;
         }
 
-        .login-title {
+        .register-title {
           font-size: 24px;
           font-weight: 600;
           color: #1e293b;
@@ -321,6 +340,23 @@ const handleSubmit = async (e: React.FormEvent) => {
         }
 
         .error-icon {
+          font-size: 18px;
+        }
+
+        .success-message {
+          background: #dcfce7;
+          border: 1px solid #bbf7d0;
+          color: #166534;
+          padding: 12px 16px;
+          border-radius: 12px;
+          margin-bottom: 20px;
+          font-size: 14px;
+          display: flex;
+          align-items: center;
+          gap: 8px;
+        }
+
+        .success-icon {
           font-size: 18px;
         }
 
@@ -353,41 +389,7 @@ const handleSubmit = async (e: React.FormEvent) => {
           transform: scale(1.01);
         }
 
-        .form-options {
-          display: flex;
-          justify-content: space-between;
-          align-items: center;
-          margin-bottom: 25px;
-        }
-
-        .remember-me {
-          display: flex;
-          align-items: center;
-          gap: 8px;
-          cursor: pointer;
-          font-size: 14px;
-          color: #4b5563;
-        }
-
-        .remember-me input {
-          width: 16px;
-          height: 16px;
-          cursor: pointer;
-          accent-color: #2563eb;
-        }
-
-        .forgot-link {
-          color: #2563eb;
-          text-decoration: none;
-          font-size: 14px;
-          font-weight: 500;
-        }
-
-        .forgot-link:hover {
-          text-decoration: underline;
-        }
-
-        .login-button {
+        .register-button {
           width: 100%;
           padding: 16px;
           background: #2563eb;
@@ -402,41 +404,37 @@ const handleSubmit = async (e: React.FormEvent) => {
           margin-bottom: 15px;
         }
 
-        .login-button:hover {
+        .register-button:hover:not(:disabled) {
           background: #1d4ed8;
           transform: translateY(-2px);
           box-shadow: 0 8px 25px rgba(37, 99, 235, 0.4);
         }
 
-        .temp-login-note {
-          text-align: center;
-          font-size: 13px;
-          color: #6b7280;
-          background: #f3f4f6;
-          padding: 10px;
-          border-radius: 8px;
-          margin-bottom: 15px;
-          border: 1px dashed #d1d5db;
+        .register-button:disabled {
+          opacity: 0.6;
+          cursor: not-allowed;
+          transform: none;
+          box-shadow: none;
         }
 
-        .register-link {
+        .login-link {
           text-align: center;
           font-size: 14px;
           color: #6b7280;
         }
 
-        .register-link a {
+        .login-link a {
           color: #2563eb;
           text-decoration: none;
           font-weight: 500;
         }
 
-        .register-link a:hover {
+        .login-link a:hover {
           text-decoration: underline;
         }
 
         @media (max-width: 768px) {
-          .login-card {
+          .register-card {
             padding: 30px 20px;
           }
           
@@ -459,4 +457,4 @@ const handleSubmit = async (e: React.FormEvent) => {
   );
 };
 
-export default Login;
+export default Register;

@@ -1,7 +1,7 @@
 import axios from 'axios';
 import { LoginCredentials, RegisterData, User, ParkingSpot, Reservation } from '../types';
 
-const API_URL = 'http://localhost/api';
+const API_URL = 'http://localhost:3001/api';
 
 const api = axios.create({
   baseURL: API_URL,
@@ -33,10 +33,20 @@ export const authAPI = {
   },
 };
 
+// Car API
+export const carAPI = {
+  createCar: (carData: { autoNumber: string; type: string; mark: string; color: string; notes: string }) =>
+    api.post('/cars', carData),
+  getCar: () => api.get<{ car: import('../types').Car }>('/cars'),
+  updateCar: (carId: number, carData: { autoNumber: string; type: string; mark: string; color: string; notes: string }) =>
+    api.put(`/cars/${carId}`, carData),
+  deleteCar: (carId: number) => api.delete(`/cars/${carId}`),
+};
+
 // Parking API
 export const parkingAPI = {
   getSpots: () => api.get<ParkingSpot[]>('/parking/spots'),
-  
-  getSpotsByFloor: (floor: number) => 
+
+  getSpotsByFloor: (floor: number) =>
     api.get<ParkingSpot[]>(`/parking/spots?floor=${floor}`),
 };

@@ -18,6 +18,18 @@ export interface RegisterData {
   name: string;
 }
 
+// Car types
+export interface Car {
+  id: number;
+  user_id: number;
+  type: string;
+  mark: string;
+  auto_number: string;
+  color: string;
+  notes: string;
+  created_at: string;
+}
+
 // Parking types
 export interface ParkingSpot {
   id: number;

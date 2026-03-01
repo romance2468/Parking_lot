@@ -24,6 +24,7 @@ const LandingPage: React.FC = () => {
           
           <div className="nav-buttons">
             <button className="btn btn-outline" onClick={() => navigate('/login')}>Войти</button>
+            <button className="btn btn-outline" onClick={() => navigate('/register')}>Регистрация</button>
             <button className="btn btn-primary" onClick={() => navigate('/car-details')}>Забронировать</button>
           </div>
         </div>
