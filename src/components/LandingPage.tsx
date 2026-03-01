@@ -1,8 +1,15 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { authAPI } from '../api';
 
 const LandingPage: React.FC = () => {
   const navigate = useNavigate();
+  const [isLoggedIn, setIsLoggedIn] = useState(() => !!localStorage.getItem('token'));
+
+  const handleLogout = () => {
+    authAPI.logout();
+    setIsLoggedIn(false);
+  };
 
   return (
     <div className="landing-page">
@@ -23,9 +30,18 @@ const LandingPage: React.FC = () => {
           </div>
           
           <div className="nav-buttons">
-            <button className="btn btn-outline" onClick={() => navigate('/login')}>Войти</button>
-            <button className="btn btn-outline" onClick={() => navigate('/register')}>Регистрация</button>
-            <button className="btn btn-primary" onClick={() => navigate('/car-details')}>Забронировать</button>
+            {!isLoggedIn && (
+              <>
+                <button className="btn btn-outline" onClick={() => navigate('/register')}>Регистрация</button>
+                <button className="btn btn-primary" onClick={() => navigate('/login')}>Вход</button>
+              </>
+            )}
+            {isLoggedIn && (
+              <>
+                <button className="btn btn-outline" onClick={() => navigate('/profile')}>Профиль</button>
+                <button className="btn btn-primary" onClick={handleLogout}>Выйти</button>
+              </>
+            )}
           </div>
         </div>
       </nav>

@@ -27,6 +27,12 @@ export const authAPI = {
   register: (data: RegisterData) => 
     api.post<{ user: User; token: string }>('/auth/register', data),
   
+  getMe: () => api.get<{ user: User }>('/auth/me'),
+  getProfile: () => api.get<{ user: User; car: import('../types').Car | null }>('/profile'),
+  updateProfile: (data: { name: string }) => api.put<{ user: User }>('/auth/me', data),
+  updatePassword: (data: { currentPassword: string; newPassword: string }) =>
+    api.put<{ message: string }>('/auth/me/password', data),
+  
   logout: () => {
     localStorage.removeItem('token');
     localStorage.removeItem('user');

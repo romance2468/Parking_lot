@@ -10,6 +10,7 @@ const Login: React.FC = () => {
   const [error, setError] = useState('');
   const [rememberMe, setRememberMe] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [loginSuccess, setLoginSuccess] = useState<{ token: string; user?: unknown } | null>(null);
 
   // Create more visible bubbles
   const [bubbles, setBubbles] = useState<Array<{ id: number; size: number; left: number; duration: number; delay: number }>>([]);
@@ -45,27 +46,46 @@ const handleSubmit = async (e: React.FormEvent) => {
         email,
         password
       };
-      
+
       const response = await authAPI.login(credentials);
-      
-      localStorage.setItem('token', response.data.token);
-      localStorage.setItem('user', JSON.stringify(response.data.user));
-      
+      const token = response.data?.token;
+      const userData = response.data?.user;
+
+      if (!token) {
+        setError('Ошибка входа: не получен токен');
+        setLoading(false);
+        return;
+      }
+
+      localStorage.setItem('token', token);
+      if (userData) {
+        localStorage.setItem('user', JSON.stringify(userData));
+      }
+
       if (rememberMe) {
         localStorage.setItem('rememberedEmail', email);
       } else {
         localStorage.removeItem('rememberedEmail');
       }
-      
+
       setLoading(false);
-      navigate('/car-details');
+      setLoginSuccess({ token, user: userData });
     } catch (err: any) {
       setLoading(false);
       setError(err.response?.data?.error || 'Неверный email или пароль');
     }
   };
 
-// Load remembered email
+  // Переход в профиль после успешного входа, передаём токен в state (чтобы Profile точно его получил)
+  useEffect(() => {
+    if (loginSuccess) {
+      const { token: t, user: u } = loginSuccess;
+      setLoginSuccess(null);
+      navigate('/profile', { replace: true, state: { token: t, user: u } });
+    }
+  }, [loginSuccess, navigate]);
+
+  // Load remembered email
   useEffect(() => {
     const remembered = localStorage.getItem('rememberedEmail');
     if (remembered) {

@@ -76,7 +76,7 @@ const CarDetails = () => {
     };
 
     fetchCar();
-  }, []);
+  }, [navigate, location.state]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -103,14 +103,17 @@ const CarDetails = () => {
         notes: notes.trim()
       };
       
+      let savedCar;
       if (car) {
-        await carAPI.updateCar(car.id, carData);
+        const res = await carAPI.updateCar(car.id, carData);
+        savedCar = res.data?.car;
       } else {
-        await carAPI.createCar(carData);
+        const res = await carAPI.createCar(carData);
+        savedCar = res.data?.car;
       }
       
       setIsSubmitting(false);
-      navigate('/');
+      navigate('/profile', { state: savedCar ? { car: savedCar } : undefined });
     } catch (err: any) {
       setIsSubmitting(false);
       setError(err.response?.data?.error || 'Ошибка сохранения данных автомобиля');
@@ -235,7 +238,7 @@ const CarDetails = () => {
                   checked={agreeToTerms}
                   onChange={(e) => setAgreeToTerms(e.target.checked)}
                 />
-                <span>Я согласен с <a href="#" className="terms-link">условиями использования</a></span>
+                <span>Я согласен с <button type="button" className="terms-link">условиями использования</button></span>
               </label>
             </div>
 
@@ -295,7 +298,7 @@ const CarDetails = () => {
         .terms-group { margin-bottom: 30px; padding: 12px; background: #f8fafc; border-radius: 12px; border: 1px solid #e2e8f0; }
         .checkbox-label { display: flex; align-items: center; gap: 10px; cursor: pointer; font-size: 14px; color: #4b5563; }
         .checkbox-label input[type="checkbox"] { width: 18px; height: 18px; cursor: pointer; accent-color: #2563eb; }
-        .terms-link { color: #2563eb; text-decoration: none; font-weight: 500; }
+        .terms-link { background: none; border: none; padding: 0; font: inherit; color: #2563eb; text-decoration: none; font-weight: 500; cursor: pointer; }
         .terms-link:hover { text-decoration: underline; }
         .button-group { display: grid; grid-template-columns: 1fr 2fr; gap: 15px; }
         .btn { padding: 14px; border-radius: 12px; font-size: 15px; font-weight: 500; cursor: pointer; transition: all 0.3s; border: none; }

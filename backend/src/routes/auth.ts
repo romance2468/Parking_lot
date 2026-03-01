@@ -76,4 +76,56 @@ router.get('/me', async (req: Request, res: Response) => {
   }
 });
 
+router.put('/me', async (req: Request, res: Response) => {
+  try {
+    const authHeader = req.headers.authorization;
+    const token = extractTokenFromHeader(authHeader);
+    const payload = verifyToken(token);
+    const { name } = req.body;
+
+    if (!name || !name.trim()) {
+      return res.status(400).json({ error: 'Имя не может быть пустым' });
+    }
+
+    const user = await authService.updateUserName(payload.userId, name.trim());
+    if (!user) {
+      return res.status(404).json({ error: 'Пользователь не найден' });
+    }
+
+    res.json({
+      user: {
+        id: user.id,
+        name: user.user_name,
+        email: user.user_email
+      }
+    });
+  } catch (error: any) {
+    res.status(401).json({ error: error.message });
+  }
+});
+
+router.put('/me/password', async (req: Request, res: Response) => {
+  try {
+    const authHeader = req.headers.authorization;
+    const token = extractTokenFromHeader(authHeader);
+    const payload = verifyToken(token);
+    const { currentPassword, newPassword } = req.body;
+
+    if (!currentPassword || !newPassword) {
+      return res.status(400).json({ error: 'Введите текущий и новый пароль' });
+    }
+    if (newPassword.length < 6) {
+      return res.status(400).json({ error: 'Новый пароль не менее 6 символов' });
+    }
+
+    await authService.updatePassword(payload.userId, currentPassword, newPassword);
+    res.json({ message: 'Пароль успешно изменён' });
+  } catch (error: any) {
+    if (error.message === 'Неверный текущий пароль') {
+      return res.status(400).json({ error: error.message });
+    }
+    res.status(401).json({ error: error.message });
+  }
+});
+
 export default router;

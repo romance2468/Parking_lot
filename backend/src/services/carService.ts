@@ -54,11 +54,24 @@ export class CarService {
 
   async getCarByUserId(userId: number): Promise<Car | null> {
     return new Promise((resolve, reject) => {
-      this.db.get('SELECT * FROM cars WHERE user_id = ?', [userId], (err, row: Car) => {
+      this.db.get('SELECT * FROM cars WHERE user_id = ?', [userId], (err, row: any) => {
         if (err) {
           return reject(err);
         }
-        resolve(row || null);
+        if (!row) {
+          return resolve(null);
+        }
+        const car: Car = {
+          id: row.id ?? row.ID,
+          user_id: row.user_id ?? row.USER_ID ?? userId,
+          type: row.type ?? row.TYPE ?? 'sedan',
+          mark: row.mark ?? row.MARK ?? '',
+          auto_number: row.auto_number ?? row.AUTO_NUMBER ?? '',
+          color: row.color ?? row.COLOR ?? '',
+          notes: row.notes ?? row.NOTES ?? '',
+          created_at: row.created_at ?? row.CREATED_AT ?? new Date().toISOString()
+        };
+        resolve(car);
       });
     });
   }

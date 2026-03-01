@@ -5,12 +5,13 @@ import { verifyToken, extractTokenFromHeader } from '../config/auth';
 const router = Router();
 const carService = new CarService();
 
-// Middleware для проверки аутентификации
+// Middleware для проверки аутентификации (GET-запросы не имеют body — инициализируем при необходимости)
 const authenticateToken = (req: Request, res: Response, next: any) => {
   try {
     const authHeader = req.headers.authorization;
     const token = extractTokenFromHeader(authHeader);
     const payload = verifyToken(token);
+    if (!req.body) req.body = {};
     req.body.userId = payload.userId;
     next();
   } catch (error: any) {

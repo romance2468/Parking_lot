@@ -21,11 +21,8 @@ class DatabaseManager {
 
   private initTables(): void {
     this.db.serialize(() => {
-      this.db.run('DROP TABLE IF EXISTS cars');
-      this.db.run('DROP TABLE IF EXISTS users');
-
       const createUsersTable = `
-        CREATE TABLE users (
+        CREATE TABLE IF NOT EXISTS users (
           id INTEGER PRIMARY KEY AUTOINCREMENT,
           user_name TEXT NOT NULL,
           user_email TEXT UNIQUE NOT NULL,
@@ -35,7 +32,7 @@ class DatabaseManager {
       `;
 
       const createCarsTable = `
-        CREATE TABLE cars (
+        CREATE TABLE IF NOT EXISTS cars (
           id INTEGER PRIMARY KEY AUTOINCREMENT,
           user_id INTEGER NOT NULL,
           type TEXT NOT NULL,
@@ -52,7 +49,7 @@ class DatabaseManager {
         if (err) {
           console.error('Ошибка создания таблицы users:', err.message);
         } else {
-          console.log('Таблица users создана');
+          console.log('Таблица users готова');
         }
       });
 
@@ -60,7 +57,7 @@ class DatabaseManager {
         if (err) {
           console.error('Ошибка создания таблицы cars:', err.message);
         } else {
-          console.log('Таблица cars создана');
+          console.log('Таблица cars готова');
         }
       });
     });
