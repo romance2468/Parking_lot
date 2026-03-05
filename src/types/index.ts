@@ -39,6 +39,26 @@ export interface ParkingSpot {
   type: 'standard' | 'handicap' | 'electric';
 }
 
+export interface ParkingPlace {
+  id_parking: number;
+  floor: number;
+  section: string;
+  place_num: number;
+  is_free: number;
+  type_parking: string;
+}
+
+export interface BookingSession {
+  id_session: number;
+  car_id: number;
+  id_parking: number;
+  type_parking: string;
+  time_start: string;
+  time_end: string;
+  price: number;
+  is_done_session: number;
+}
+
 export interface Reservation {
   id: number;
   userId: number;

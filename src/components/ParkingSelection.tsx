@@ -1,17 +1,68 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { authAPI, parkingAPI } from '../api';
+import type { ParkingPlace } from '../types';
+
+type SpotDisplay = {
+  id_parking: number;
+  number: string;
+  row: string;
+  status: 'available' | 'occupied' | 'selected' | 'disabled';
+  type: string;
+  price: number;
+};
+
+const priceByType: Record<string, number> = {
+  electric: 300,
+  Электрозарядка: 300,
+  handicap: 200,
+  'для инвалидов': 200,
+  standard: 150,
+  стандартная: 150,
+};
+
+function placeToSpot(place: ParkingPlace, selectedId: number | null): SpotDisplay {
+  const number = `${place.section}${place.place_num.toString().padStart(2, '0')}`;
+  const typeNorm = (place.type_parking || 'standard').toLowerCase();
+  const type = typeNorm.includes('electric') || typeNorm.includes('электр') ? 'electric' : typeNorm.includes('handicap') || typeNorm.includes('инвалид') ? 'handicap' : 'standard';
+  const price = priceByType[place.type_parking] ?? priceByType[type] ?? 150;
+  return {
+    id_parking: place.id_parking,
+    number,
+    row: place.section,
+    status: selectedId === place.id_parking ? 'selected' : place.is_free === 1 ? 'available' : 'occupied',
+    type,
+    price,
+  };
+}
 
 const ParkingSelection: React.FC = () => {
   const navigate = useNavigate();
   
-  // State for selected spot and filters
   const [selectedFloor, setSelectedFloor] = useState('1');
-  const [selectedSpot, setSelectedSpot] = useState<string | null>(null);
+  const [selectedSpotId, setSelectedSpotId] = useState<number | null>(null);
   const [vehicleType, setVehicleType] = useState('standard');
   const [duration, setDuration] = useState('2');
 
-  // Create bubbles (same as other pages)
+  const [places, setPlaces] = useState<ParkingPlace[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
   const [bubbles, setBubbles] = useState<Array<{ id: number; size: number; left: number; duration: number; delay: number }>>([]);
+
+  const loadPlaces = useCallback((floor: number) => {
+    setLoading(true);
+    setError(null);
+    parkingAPI.getPlaces(floor)
+      .then((res) => {
+        setPlaces(res.data.places || []);
+      })
+      .catch((err) => {
+        setError(err.response?.data?.error || err.message || 'Не удалось загрузить места');
+        setPlaces([]);
+      })
+      .finally(() => setLoading(false));
+  }, []);
 
   useEffect(() => {
     const newBubbles = [];
@@ -27,44 +78,34 @@ const ParkingSelection: React.FC = () => {
     setBubbles(newBubbles);
   }, []);
 
-  // Generate parking spots for each floor
-  const generateSpots = (floor: string) => {
-    const rows = ['A', 'B', 'C', 'D', 'E'];
-    const spotsPerRow = 8;
-    const spots = [];
-    
-    for (const row of rows) {
-      for (let i = 1; i <= spotsPerRow; i++) {
-        const spotNumber = `${row}${i.toString().padStart(2, '0')}`;
-        // Random status for demo (in real app, this would come from API)
-        const random = Math.random();
-        let status: 'available' | 'occupied' | 'selected' | 'disabled' = 'available';
-        
-        if (spotNumber === selectedSpot) {
-          status = 'selected';
-        } else if (random < 0.3) {
-          status = 'occupied';
-        } else if (random < 0.4) {
-          status = 'disabled';
+  useEffect(() => {
+    const token = localStorage.getItem('token');
+    if (!token) return;
+    authAPI.getProfile()
+      .then((res) => {
+        const carType = res.data?.car?.type;
+        if (carType && (String(carType).toLowerCase() === 'electric' || String(carType).toLowerCase().includes('электр'))) {
+          setVehicleType('electric');
         }
-        
-        // Special spots for different vehicle types
-        const spotType = row === 'A' ? 'electric' : (row === 'B' ? 'handicap' : 'standard');
-        
-        spots.push({
-          id: `${floor}-${spotNumber}`,
-          number: spotNumber,
-          row: row,
-          status,
-          type: spotType,
-          price: spotType === 'electric' ? 300 : (spotType === 'handicap' ? 200 : 150)
-        });
-      }
-    }
-    return spots;
-  };
+      })
+      .catch(() => {});
+  }, []);
 
-  const parkingSpots = generateSpots(selectedFloor);
+  useEffect(() => {
+    loadPlaces(Number(selectedFloor));
+    setSelectedSpotId(null);
+  }, [selectedFloor, loadPlaces]);
+
+  const parkingSpots: SpotDisplay[] = places.map((p) => placeToSpot(p, selectedSpotId));
+  const selectedSpot = selectedSpotId != null ? parkingSpots.find((s) => s.id_parking === selectedSpotId)?.number ?? null : null;
+
+  useEffect(() => {
+    if (selectedSpotId == null) return;
+    const place = places.find((p) => p.id_parking === selectedSpotId);
+    if (!place) return;
+    const spot = placeToSpot(place, selectedSpotId);
+    if (spot.type !== vehicleType) setSelectedSpotId(null);
+  }, [vehicleType, selectedSpotId, places]);
 
   const getSpotColor = (status: string, type: string) => {
     if (status === 'selected') return '#2563eb';
@@ -90,26 +131,35 @@ const ParkingSelection: React.FC = () => {
     }
   };
 
-  const handleSpotClick = (spot: any) => {
-    if (spot.status === 'available') {
-      setSelectedSpot(spot.number);
+  const isSpotSelectableForVehicle = (spot: SpotDisplay) =>
+    spot.status === 'available' && spot.type === vehicleType;
+
+  const handleSpotClick = (spot: SpotDisplay) => {
+    if (isSpotSelectableForVehicle(spot)) {
+      setSelectedSpotId(spot.id_parking);
     }
   };
 
+  const handleRefresh = () => {
+    loadPlaces(Number(selectedFloor));
+  };
+
   const handleContinue = () => {
-    if (!selectedSpot) {
+    if (selectedSpotId == null || !selectedSpot) {
       alert('Пожалуйста, выберите место');
       return;
     }
-    
+    const spotData = parkingSpots.find((s) => s.id_parking === selectedSpotId);
     const parkingData = {
       floor: selectedFloor,
       spot: selectedSpot,
-      duration: duration,
-      vehicleType: vehicleType
+      id_parking: selectedSpotId,
+      type_parking: spotData?.type || vehicleType,
+      price: spotData?.price ?? 150,
+      duration,
+      vehicleType,
     };
     localStorage.setItem('parkingSelection', JSON.stringify(parkingData));
-    
     navigate('/payment');
   };
 
@@ -201,6 +251,12 @@ const ParkingSelection: React.FC = () => {
             </div>
           </div>
 
+          {error && (
+            <div className="error-message" style={{ color: '#dc2626', marginBottom: '12px' }}>
+              {error}
+            </div>
+          )}
+
           {/* Legend */}
           <div className="legend">
             <div className="legend-item">
@@ -225,49 +281,69 @@ const ParkingSelection: React.FC = () => {
             </div>
           </div>
 
-          {/* Screen Indicator */}
+          {/* Screen Indicator + Refresh */}
           <div className="screen-indicator">
             <div className="screen">ВЪЕЗД</div>
+            <button
+              type="button"
+              onClick={handleRefresh}
+              disabled={loading}
+              className="refresh-btn-round"
+              title="Обновить места"
+              aria-label="Обновить места"
+            >
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M21 12a9 9 0 1 1-2.636-6.364M21 3v6h-6" />
+              </svg>
+            </button>
           </div>
 
           {/* Parking Grid */}
           <div className="parking-grid">
-            {/* Row Labels */}
-            <div className="row-labels">
-              {['A', 'B', 'C', 'D', 'E'].map(row => (
-                <div key={row} className="row-label">{row}</div>
-              ))}
-            </div>
-
-            {/* Parking Spots */}
-            <div className="spots-container">
-              {Array.from({ length: 8 }, (_, i) => i + 1).map(spotNum => (
-                <div key={spotNum} className="spot-column">
-                  <div className="column-number">{spotNum}</div>
-                  {['A', 'B', 'C', 'D', 'E'].map(row => {
-                    const spot = parkingSpots.find(s => s.number === `${row}${spotNum.toString().padStart(2, '0')}`);
-                    if (!spot) return null;
-                    
-                    return (
-                      <div
-                        key={`${row}${spotNum}`}
-                        className={`parking-spot ${spot.status} ${spot.type}`}
-                        style={{
-                          backgroundColor: getSpotColor(spot.status, spot.type),
-                          border: getSpotBorder(spot.status, spot.type),
-                          cursor: spot.status === 'available' ? 'pointer' : 'not-allowed'
-                        }}
-                        onClick={() => handleSpotClick(spot)}
-                      >
-                        <span className="spot-number">{spot.number}</span>
-                        {spot.type === 'electric' && <span className="spot-icon">⚡</span>}
-                        {spot.type === 'handicap' && <span className="spot-icon">♿</span>}
-                      </div>
-                    );
-                  })}
+            {loading ? (
+              <div style={{ gridColumn: '1 / -1', textAlign: 'center', padding: '24px', color: '#64748b' }}>
+                Загрузка мест…
+              </div>
+            ) : (
+              <>
+                <div className="row-labels">
+                  {['A', 'B', 'C', 'D', 'E'].map(row => (
+                    <div key={row} className="row-label">{row}</div>
+                  ))}
                 </div>
-              ))}
-            </div>
+                <div className="spots-container">
+                  {Array.from({ length: 8 }, (_, i) => i + 1).map(spotNum => (
+                    <div key={spotNum} className="spot-column">
+                      <div className="column-number">{spotNum}</div>
+                      {['A', 'B', 'C', 'D', 'E'].map(row => {
+                        const spot = parkingSpots.find(s => s.number === `${row}${spotNum.toString().padStart(2, '0')}`);
+                        if (!spot) return <div key={`${row}-${spotNum}`} className="parking-spot disabled" style={{ backgroundColor: '#e2e8f0', border: '1px dashed #cbd5e1' }} />;
+                        const selectable = isSpotSelectableForVehicle(spot);
+                        const availableButWrongType = spot.status === 'available' && spot.type !== vehicleType;
+                        return (
+                          <div
+                            key={`${row}${spotNum}`}
+                            className={`parking-spot ${spot.status} ${spot.type} ${availableButWrongType ? 'wrong-type' : ''}`}
+                            style={{
+                              backgroundColor: getSpotColor(spot.status, spot.type),
+                              border: getSpotBorder(spot.status, spot.type),
+                              cursor: selectable ? 'pointer' : 'not-allowed',
+                              opacity: availableButWrongType ? 0.55 : 1
+                            }}
+                            onClick={() => handleSpotClick(spot)}
+                            title={availableButWrongType ? `Место для типа «${spot.type === 'electric' ? 'Электромобиль' : spot.type === 'handicap' ? 'Для инвалидов' : 'Стандарт'}». Выбран тип «${vehicleType === 'electric' ? 'Электромобиль' : vehicleType === 'handicap' ? 'Для инвалидов' : 'Стандарт'}».` : undefined}
+                          >
+                            <span className="spot-number">{spot.number}</span>
+                            {spot.type === 'electric' && <span className="spot-icon">⚡</span>}
+                            {spot.type === 'handicap' && <span className="spot-icon">♿</span>}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  ))}
+                </div>
+              </>
+            )}
           </div>
 
           {/* Selected Spot Info */}
@@ -277,7 +353,17 @@ const ParkingSelection: React.FC = () => {
                 Выбрано место: <strong>{selectedSpot}</strong> ({selectedFloor} этаж)
               </div>
               <div className="selected-price">
-                {parkingSpots.find(s => s.number === selectedSpot)?.price} ₽/час
+                {(() => {
+                  const spotData = parkingSpots.find(s => s.number === selectedSpot);
+                  const pricePerHour = spotData?.price ?? 150;
+                  const hours = Number(duration) || 1;
+                  const total = pricePerHour * hours;
+                  return (
+                    <>
+                      {pricePerHour} ₽/час × {hours} {hours === 1 ? 'час' : hours < 5 ? 'часа' : 'часов'} = <strong>{total} ₽</strong>
+                    </>
+                  );
+                })()}
               </div>
             </div>
           )}
@@ -527,10 +613,13 @@ const ParkingSelection: React.FC = () => {
           background: #2563eb;
         }
 
-        /* Screen Indicator */
+        /* Screen Indicator + Round Refresh */
         .screen-indicator {
           margin-bottom: 20px;
-          text-align: center;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          gap: 14px;
         }
 
         .screen {
@@ -543,6 +632,33 @@ const ParkingSelection: React.FC = () => {
           font-weight: 600;
           letter-spacing: 2px;
           box-shadow: 0 4px 10px rgba(0,0,0,0.2);
+        }
+
+        .refresh-btn-round {
+          width: 44px;
+          height: 44px;
+          border-radius: 50%;
+          border: 2px solid #2563eb;
+          background: white;
+          color: #2563eb;
+          cursor: pointer;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          transition: background 0.2s, color 0.2s, transform 0.2s;
+          box-shadow: 0 2px 8px rgba(37, 99, 235, 0.25);
+        }
+        .refresh-btn-round:hover:not(:disabled) {
+          background: #2563eb;
+          color: white;
+          transform: scale(1.05);
+        }
+        .refresh-btn-round:disabled {
+          opacity: 0.6;
+          cursor: not-allowed;
+        }
+        .refresh-btn-round svg {
+          flex-shrink: 0;
         }
 
         /* Parking Grid */

@@ -4,6 +4,7 @@ import dotenv from 'dotenv';
 import authRoutes from './routes/auth';
 import carRoutes from './routes/cars';
 import profileRoutes from './routes/profile';
+import parkingRoutes from './routes/parking';
 import { dbManager } from './config/database';
 
 dotenv.config();
@@ -17,6 +18,7 @@ app.use(express.json());
 app.use('/api/auth', authRoutes);
 app.use('/api/cars', carRoutes);
 app.use('/api/profile', profileRoutes);
+app.use('/api/parking', parkingRoutes);
 
 app.get('/api/health', (req, res) => {
   res.json({ status: 'ok', message: 'Parking API is running' });
