@@ -1,25 +1,24 @@
 import React, { useState, useEffect } from 'react';
-import { useNavigate, useLocation } from 'react-router-dom';
-import { carAPI } from '../api';
-import { Car } from '../types';
+import { useNavigate } from 'react-router-dom';
 
-const CarDetails = () => {
+const CarDetails: React.FC = () => {
   const navigate = useNavigate();
-  const location = useLocation();
   
-  const [autoNumber, setAutoNumber] = useState('');
-  const [mark, setMark] = useState('');
-  const [color, setColor] = useState('');
+  // Form state
+  const [licensePlate, setLicensePlate] = useState('');
+  const [carModel, setCarModel] = useState('');
+  const [carColor, setCarColor] = useState('');
   const [selectedVehicleType, setSelectedVehicleType] = useState('sedan');
-  const [notes, setNotes] = useState('');
+  const [additionalNotes, setAdditionalNotes] = useState('');
   const [agreeToTerms, setAgreeToTerms] = useState(false);
   const [error, setError] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [car, setCar] = useState<Car | null>(null);
 
+  // Create bubbles (same as login page)
   const [bubbles, setBubbles] = useState<Array<{ id: number; size: number; left: number; duration: number; delay: number }>>([]);
 
-  React.useEffect(() => {
+  useEffect(() => {
+    // Generate bubbles (same as login page)
     const newBubbles = [];
     for (let i = 0; i < 40; i++) {
       newBubbles.push({
@@ -40,48 +39,10 @@ const CarDetails = () => {
     { id: 'electric', label: 'Электро', icon: '⚡' }
   ];
 
-  const routeState = location.state as { fromRegister?: boolean; token?: string; userId?: number } | undefined;
-
-  useEffect(() => {
-    if (routeState?.token) {
-      localStorage.setItem('token', routeState.token);
-    }
-
-    // После регистрации не вызываем getCar — у пользователя ещё нет авто, не даём 401
-    if (routeState?.fromRegister) {
-      return;
-    }
-
-    const fetchCar = async () => {
-      try {
-        const response = await carAPI.getCar();
-        const carData = response.data?.car;
-        if (carData) {
-          setCar(carData);
-          setAutoNumber(carData.auto_number || '');
-          setMark(carData.mark || '');
-          setColor(carData.color || '');
-          setSelectedVehicleType(carData.type || 'sedan');
-          setNotes(carData.notes || '');
-        }
-      } catch (err: any) {
-        if (err.response?.status === 401) {
-          navigate('/login');
-          return;
-        }
-        if (err.response?.status !== 404) {
-          setError(err.response?.data?.error || 'Ошибка загрузки данных автомобиля');
-        }
-      }
-    };
-
-    fetchCar();
-  }, [navigate, location.state]);
-
-  const handleSubmit = async (e: React.FormEvent) => {
+  const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     
-    if (!autoNumber.trim()) {
+    if (!licensePlate.trim()) {
       setError('Пожалуйста, введите номер автомобиля');
       return;
     }
@@ -94,34 +55,29 @@ const CarDetails = () => {
     setError('');
     setIsSubmitting(true);
     
-    try {
-      const carData = {
-        autoNumber: autoNumber.trim(),
-        type: selectedVehicleType,
-        mark: mark.trim(),
-        color: color.trim(),
-        notes: notes.trim()
-      };
-      
-      let savedCar;
-      if (car) {
-        const res = await carAPI.updateCar(car.id, carData);
-        savedCar = res.data?.car;
-      } else {
-        const res = await carAPI.createCar(carData);
-        savedCar = res.data?.car;
-      }
-      
+    // Save car details to localStorage
+    const carDetails = {
+      licensePlate,
+      carModel,
+      carColor,
+      vehicleType: selectedVehicleType,
+      additionalNotes,
+      entryTime: new Date().toISOString()
+    };
+    
+    localStorage.setItem('carDetails', JSON.stringify(carDetails));
+    
+    // Simulate loading
+    setTimeout(() => {
       setIsSubmitting(false);
-      navigate('/profile', { state: savedCar ? { car: savedCar } : undefined });
-    } catch (err: any) {
-      setIsSubmitting(false);
-      setError(err.response?.data?.error || 'Ошибка сохранения данных автомобиля');
-    }
+      // THIS LINE NAVIGATES TO PARKING SELECTION - MAKE SURE IT'S CORRECT
+      navigate('/parking-selection');
+    }, 1000);
   };
 
   return (
     <div className="car-details-page">
+      {/* Gray Background with Bubbles */}
       <div className="gray-bg">
         {bubbles.map((bubble) => (
           <div
@@ -138,8 +94,10 @@ const CarDetails = () => {
         ))}
       </div>
       
+      {/* Content Container */}
       <div className="content-container">
         <div className="content-card">
+          {/* Logo */}
           <div className="logo-container">
             <div className="logo-circle">
               <svg width="70" height="70" viewBox="0 0 80 80" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -167,6 +125,7 @@ const CarDetails = () => {
           )}
 
           <form onSubmit={handleSubmit}>
+            {/* Vehicle Type Selection */}
             <div className="form-group">
               <label>Тип автомобиля</label>
               <div className="vehicle-types">
@@ -184,25 +143,27 @@ const CarDetails = () => {
               </div>
             </div>
 
+            {/* License Plate */}
             <div className="form-group">
               <label>Номер автомобиля <span className="required">*</span></label>
               <input
                 type="text"
-                value={autoNumber}
-                onChange={(e) => setAutoNumber(e.target.value.toUpperCase())}
+                value={licensePlate}
+                onChange={(e) => setLicensePlate(e.target.value.toUpperCase())}
                 placeholder="А123ВС"
                 className="form-input"
                 required
               />
             </div>
 
+            {/* Two columns for Model and Color */}
             <div className="row">
               <div className="form-group">
-                <label>Марка</label>
+                <label>Марка и модель</label>
                 <input
                   type="text"
-                  value={mark}
-                  onChange={(e) => setMark(e.target.value)}
+                  value={carModel}
+                  onChange={(e) => setCarModel(e.target.value)}
                   placeholder="Toyota Camry"
                   className="form-input"
                 />
@@ -212,25 +173,27 @@ const CarDetails = () => {
                 <label>Цвет</label>
                 <input
                   type="text"
-                  value={color}
-                  onChange={(e) => setColor(e.target.value)}
+                  value={carColor}
+                  onChange={(e) => setCarColor(e.target.value)}
                   placeholder="Черный"
                   className="form-input"
                 />
               </div>
             </div>
 
+            {/* Additional Notes */}
             <div className="form-group">
               <label>Дополнительные заметки</label>
               <textarea
-                value={notes}
-                onChange={(e) => setNotes(e.target.value)}
+                value={additionalNotes}
+                onChange={(e) => setAdditionalNotes(e.target.value)}
                 placeholder="Особые пожелания, нужна зарядка для электромобиля и т.д."
                 rows={3}
                 className="form-textarea"
               />
             </div>
 
+            {/* Terms */}
             <div className="terms-group">
               <label className="checkbox-label">
                 <input
@@ -238,10 +201,11 @@ const CarDetails = () => {
                   checked={agreeToTerms}
                   onChange={(e) => setAgreeToTerms(e.target.checked)}
                 />
-                <span>Я согласен с <button type="button" className="terms-link">условиями использования</button></span>
+                <span>Я согласен с <a href="#" className="terms-link">условиями использования</a></span>
               </label>
             </div>
 
+            {/* Buttons */}
             <div className="button-group">
               <button
                 type="button"
@@ -264,50 +228,351 @@ const CarDetails = () => {
       </div>
 
       <style>{`
-        * { margin: 0; padding: 0; box-sizing: border-box; }
-        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; }
-        .car-details-page { min-height: 100vh; position: relative; display: flex; align-items: center; justify-content: center; overflow: hidden; padding: 20px; }
-        .gray-bg { position: absolute; top: 0; left: 0; right: 0; bottom: 0; background: #b8c3d4; z-index: 1; overflow: hidden; }
-        .bubble { position: absolute; bottom: -100px; background: rgba(37, 99, 235, 0.15); border-radius: 50%; pointer-events: none; animation: floatUp linear infinite; border: 2px solid rgba(37, 99, 235, 0.25); box-shadow: 0 0 40px rgba(37, 99, 235, 0.2); }
-        @keyframes floatUp { 0% { transform: translateY(0) scale(1); opacity: 0.9; } 100% { transform: translateY(-120vh) scale(1.3); opacity: 0.2; } }
-        .content-container { position: relative; z-index: 10; width: 100%; max-width: 600px; }
-        .content-card { background: white; border-radius: 30px; padding: 40px; box-shadow: 0 20px 40px rgba(0, 0, 0, 0.2); animation: cardAppear 0.5s ease-out; border: 1px solid rgba(255, 255, 255, 0.5); }
-        @keyframes cardAppear { from { opacity: 0; transform: translateY(20px); } to { opacity: 1; transform: translateY(0); } }
-        .logo-container { display: flex; flex-direction: column; align-items: center; margin-bottom: 20px; }
-        .logo-circle { width: 100px; height: 100px; background: linear-gradient(135deg, #2563eb, #1d4ed8); border-radius: 50%; display: flex; align-items: center; justify-content: center; margin-bottom: 10px; box-shadow: 0 15px 30px rgba(37, 99, 235, 0.3); animation: logoFloat 3s ease-in-out infinite; border: 3px solid white; }
-        @keyframes logoFloat { 0%, 100% { transform: translateY(0) scale(1); } 50% { transform: translateY(-8px) scale(1.02); } }
-        .logo-text { font-size: 28px; font-weight: 700; }
-        .logo-main { color: #1e293b; }
-        .logo-highlight { color: #2563eb; }
-        .page-title { font-size: 24px; font-weight: 600; color: #1e293b; text-align: center; margin-bottom: 30px; }
-        .error-message { background: #fee2e2; border: 1px solid #fecaca; color: #dc2626; padding: 12px 16px; border-radius: 12px; margin-bottom: 20px; font-size: 14px; display: flex; align-items: center; gap: 8px; }
-        .error-icon { font-size: 18px; }
-        .form-group { margin-bottom: 20px; }
-        .form-group label { display: block; margin-bottom: 8px; color: #4b5563; font-size: 14px; font-weight: 500; }
-        .required { color: #dc2626; }
-        .form-input { width: 100%; padding: 14px 16px; border: 2px solid #e2e8f0; border-radius: 12px; font-size: 15px; transition: all 0.2s; outline: none; background: #f8fafc; }
-        .form-input:focus { border-color: #2563eb; box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.2); transform: scale(1.01); }
-        .form-textarea { width: 100%; padding: 14px 16px; border: 2px solid #e2e8f0; border-radius: 12px; font-size: 15px; transition: all 0.2s; outline: none; background: #f8fafc; font-family: inherit; resize: vertical; }
-        .form-textarea:focus { border-color: #2563eb; box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.2); transform: scale(1.01); }
-        .row { display: grid; grid-template-columns: 1fr 1fr; gap: 15px; }
-        .vehicle-types { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; }
-        .vehicle-type-btn { padding: 12px 0; border: 2px solid #e2e8f0; border-radius: 12px; background: white; color: #4b5563; font-size: 14px; font-weight: 500; cursor: pointer; transition: all 0.2s; display: flex; flex-direction: column; align-items: center; gap: 5px; }
-        .vehicle-type-btn:hover { border-color: #2563eb; background: #f0f4ff; }
-        .vehicle-type-btn.selected { border-color: #2563eb; background: rgba(37, 99, 235, 0.1); color: #2563eb; }
-        .vehicle-icon { font-size: 24px; }
-        .terms-group { margin-bottom: 30px; padding: 12px; background: #f8fafc; border-radius: 12px; border: 1px solid #e2e8f0; }
-        .checkbox-label { display: flex; align-items: center; gap: 10px; cursor: pointer; font-size: 14px; color: #4b5563; }
-        .checkbox-label input[type="checkbox"] { width: 18px; height: 18px; cursor: pointer; accent-color: #2563eb; }
-        .terms-link { background: none; border: none; padding: 0; font: inherit; color: #2563eb; text-decoration: none; font-weight: 500; cursor: pointer; }
-        .terms-link:hover { text-decoration: underline; }
-        .button-group { display: grid; grid-template-columns: 1fr 2fr; gap: 15px; }
-        .btn { padding: 14px; border-radius: 12px; font-size: 15px; font-weight: 500; cursor: pointer; transition: all 0.3s; border: none; }
-        .btn-outline { background: white; border: 2px solid #2563eb; color: #2563eb; }
-        .btn-outline:hover { background: #f0f4ff; transform: translateY(-2px); }
-        .btn-primary { background: #2563eb; color: white; box-shadow: 0 4px 15px rgba(37, 99, 235, 0.3); }
-        .btn-primary:hover:not(:disabled) { background: #1d4ed8; transform: translateY(-2px); box-shadow: 0 8px 25px rgba(37, 99, 235, 0.4); }
-        .btn-primary:disabled { opacity: 0.6; cursor: not-allowed; }
-        @media (max-width: 768px) { .content-card { padding: 30px 20px; } .vehicle-types { grid-template-columns: repeat(2, 1fr); } .row { grid-template-columns: 1fr; gap: 0; } .button-group { grid-template-columns: 1fr; } }
+        * {
+          margin: 0;
+          padding: 0;
+          box-sizing: border-box;
+        }
+
+        body {
+          font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+        }
+
+        .car-details-page {
+          min-height: 100vh;
+          position: relative;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          overflow: hidden;
+          padding: 20px;
+        }
+
+        /* Same background as login page */
+        .gray-bg {
+          position: absolute;
+          top: 0;
+          left: 0;
+          right: 0;
+          bottom: 0;
+          background: #b8c3d4;
+          z-index: 1;
+          overflow: hidden;
+        }
+
+        .bubble {
+          position: absolute;
+          bottom: -100px;
+          background: rgba(37, 99, 235, 0.15);
+          border-radius: 50%;
+          pointer-events: none;
+          animation: floatUp linear infinite;
+          border: 2px solid rgba(37, 99, 235, 0.25);
+          box-shadow: 0 0 40px rgba(37, 99, 235, 0.2);
+        }
+
+        @keyframes floatUp {
+          0% {
+            transform: translateY(0) scale(1);
+            opacity: 0.9;
+          }
+          100% {
+            transform: translateY(-120vh) scale(1.3);
+            opacity: 0.2;
+          }
+        }
+
+        .content-container {
+          position: relative;
+          z-index: 10;
+          width: 100%;
+          max-width: 600px;
+        }
+
+        .content-card {
+          background: white;
+          border-radius: 30px;
+          padding: 40px;
+          box-shadow: 0 20px 40px rgba(0, 0, 0, 0.2);
+          animation: cardAppear 0.5s ease-out;
+          border: 1px solid rgba(255, 255, 255, 0.5);
+        }
+
+        @keyframes cardAppear {
+          from {
+            opacity: 0;
+            transform: translateY(20px);
+          }
+          to {
+            opacity: 1;
+            transform: translateY(0);
+          }
+        }
+
+        /* Logo - same as login */
+        .logo-container {
+          display: flex;
+          flex-direction: column;
+          align-items: center;
+          margin-bottom: 20px;
+        }
+
+        .logo-circle {
+          width: 100px;
+          height: 100px;
+          background: linear-gradient(135deg, #2563eb, #1d4ed8);
+          border-radius: 50%;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          margin-bottom: 10px;
+          box-shadow: 0 15px 30px rgba(37, 99, 235, 0.3);
+          animation: logoFloat 3s ease-in-out infinite;
+          border: 3px solid white;
+        }
+
+        @keyframes logoFloat {
+          0%, 100% {
+            transform: translateY(0) scale(1);
+          }
+          50% {
+            transform: translateY(-8px) scale(1.02);
+          }
+        }
+
+        .logo-text {
+          font-size: 28px;
+          font-weight: 700;
+        }
+
+        .logo-main {
+          color: #1e293b;
+        }
+
+        .logo-highlight {
+          color: #2563eb;
+        }
+
+        .page-title {
+          font-size: 24px;
+          font-weight: 600;
+          color: #1e293b;
+          text-align: center;
+          margin-bottom: 30px;
+        }
+
+        .error-message {
+          background: #fee2e2;
+          border: 1px solid #fecaca;
+          color: #dc2626;
+          padding: 12px 16px;
+          border-radius: 12px;
+          margin-bottom: 20px;
+          font-size: 14px;
+          display: flex;
+          align-items: center;
+          gap: 8px;
+        }
+
+        .error-icon {
+          font-size: 18px;
+        }
+
+        .form-group {
+          margin-bottom: 20px;
+        }
+
+        .form-group label {
+          display: block;
+          margin-bottom: 8px;
+          color: #4b5563;
+          font-size: 14px;
+          font-weight: 500;
+        }
+
+        .required {
+          color: #dc2626;
+        }
+
+        .form-input {
+          width: 100%;
+          padding: 14px 16px;
+          border: 2px solid #e2e8f0;
+          border-radius: 12px;
+          font-size: 15px;
+          transition: all 0.2s;
+          outline: none;
+          background: #f8fafc;
+        }
+
+        .form-input:focus {
+          border-color: #2563eb;
+          box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.2);
+          transform: scale(1.01);
+        }
+
+        .form-textarea {
+          width: 100%;
+          padding: 14px 16px;
+          border: 2px solid #e2e8f0;
+          border-radius: 12px;
+          font-size: 15px;
+          transition: all 0.2s;
+          outline: none;
+          background: #f8fafc;
+          font-family: inherit;
+          resize: vertical;
+        }
+
+        .form-textarea:focus {
+          border-color: #2563eb;
+          box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.2);
+          transform: scale(1.01);
+        }
+
+        .row {
+          display: grid;
+          grid-template-columns: 1fr 1fr;
+          gap: 15px;
+        }
+
+        /* Vehicle Types */
+        .vehicle-types {
+          display: grid;
+          grid-template-columns: repeat(4, 1fr);
+          gap: 10px;
+        }
+
+        .vehicle-type-btn {
+          padding: 12px 0;
+          border: 2px solid #e2e8f0;
+          border-radius: 12px;
+          background: white;
+          color: #4b5563;
+          font-size: 14px;
+          font-weight: 500;
+          cursor: pointer;
+          transition: all 0.2s;
+          display: flex;
+          flex-direction: column;
+          align-items: center;
+          gap: 5px;
+        }
+
+        .vehicle-type-btn:hover {
+          border-color: #2563eb;
+          background: #f0f4ff;
+        }
+
+        .vehicle-type-btn.selected {
+          border-color: #2563eb;
+          background: rgba(37, 99, 235, 0.1);
+          color: #2563eb;
+        }
+
+        .vehicle-icon {
+          font-size: 24px;
+        }
+
+        /* Terms */
+        .terms-group {
+          margin-bottom: 30px;
+          padding: 12px;
+          background: #f8fafc;
+          border-radius: 12px;
+          border: 1px solid #e2e8f0;
+        }
+
+        .checkbox-label {
+          display: flex;
+          align-items: center;
+          gap: 10px;
+          cursor: pointer;
+          font-size: 14px;
+          color: #4b5563;
+        }
+
+        .checkbox-label input[type="checkbox"] {
+          width: 18px;
+          height: 18px;
+          cursor: pointer;
+          accent-color: #2563eb;
+        }
+
+        .terms-link {
+          color: #2563eb;
+          text-decoration: none;
+          font-weight: 500;
+        }
+
+        .terms-link:hover {
+          text-decoration: underline;
+        }
+
+        /* Buttons */
+        .button-group {
+          display: grid;
+          grid-template-columns: 1fr 2fr;
+          gap: 15px;
+        }
+
+        .btn {
+          padding: 14px;
+          border-radius: 12px;
+          font-size: 15px;
+          font-weight: 500;
+          cursor: pointer;
+          transition: all 0.3s;
+          border: none;
+        }
+
+        .btn-outline {
+          background: white;
+          border: 2px solid #2563eb;
+          color: #2563eb;
+        }
+
+        .btn-outline:hover {
+          background: #f0f4ff;
+          transform: translateY(-2px);
+        }
+
+        .btn-primary {
+          background: #2563eb;
+          color: white;
+          box-shadow: 0 4px 15px rgba(37, 99, 235, 0.3);
+        }
+
+        .btn-primary:hover:not(:disabled) {
+          background: #1d4ed8;
+          transform: translateY(-2px);
+          box-shadow: 0 8px 25px rgba(37, 99, 235, 0.4);
+        }
+
+        .btn-primary:disabled {
+          opacity: 0.6;
+          cursor: not-allowed;
+        }
+
+        /* Responsive */
+        @media (max-width: 768px) {
+          .content-card {
+            padding: 30px 20px;
+          }
+
+          .vehicle-types {
+            grid-template-columns: repeat(2, 1fr);
+          }
+
+          .row {
+            grid-template-columns: 1fr;
+            gap: 0;
+          }
+
+          .button-group {
+            grid-template-columns: 1fr;
+          }
+        }
       `}</style>
     </div>
   );

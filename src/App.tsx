@@ -5,6 +5,7 @@ import Login from './components/Login';
 import Register from './components/Register';
 import CarDetails from './components/CarDetails';
 import Profile from './components/Profile';
+import ParkingSelection from './components/ParkingSelection'; // ADD THIS LINE
 
 function App() {
   return (
@@ -16,6 +17,7 @@ function App() {
           <Route path="/register" element={<Register />} />
           <Route path="/car-details" element={<CarDetails />} />
           <Route path="/profile" element={<Profile />} />
+          <Route path="/parking-selection" element={<ParkingSelection />} /> {/* ADD THIS LINE */}
         </Routes>
       </div>
     </BrowserRouter>
