@@ -1,0 +1,14 @@
+# Не копировать в образ при сборке фронтенда
+node_modules
+build
+.git
+.gitignore
+*.md
+.env*
+backend/dist
+*.db
+coverage
+.pnp
+.pnp.js
+npm-debug.log*
+.DS_Store

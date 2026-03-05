@@ -1,7 +1,8 @@
 import axios from 'axios';
 import { LoginCredentials, RegisterData, User, ParkingSpot, Reservation } from '../types';
 
-const API_URL = 'http://localhost:3001/api';
+// В production за nginx: относительный /api, nginx проксирует на бэкенд
+const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:3001/api';
 
 const api = axios.create({
   baseURL: API_URL,

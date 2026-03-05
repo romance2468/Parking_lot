@@ -1,0 +1,17 @@
+# syntax=docker/dockerfile:1
+# Бэкенд API (Node.js)
+FROM node:20-alpine
+
+WORKDIR /app
+
+COPY package*.json ./
+# Кэш npm между сборками — повторный build не тянет пакеты заново
+RUN --mount=type=cache,target=/root/.npm \
+    npm ci --legacy-peer-deps
+
+COPY . .
+RUN npm run build:backend
+
+EXPOSE 3001
+
+CMD ["npm", "run", "start:backend"]
