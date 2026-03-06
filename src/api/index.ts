@@ -1,7 +1,8 @@
 import axios from 'axios';
-import { LoginCredentials, RegisterData, User, ParkingSpot, Reservation } from '../types';
+import { LoginCredentials, RegisterData, User, ParkingSpot, ParkingPlace, BookingSession } from '../types';
 
-const API_URL = 'http://localhost:3001/api';
+// В production за nginx: относительный /api, nginx проксирует на бэкенд
+const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:3001/api';
 
 const api = axios.create({
   baseURL: API_URL,
@@ -51,8 +52,11 @@ export const carAPI = {
 
 // Parking API
 export const parkingAPI = {
-  getSpots: () => api.get<ParkingSpot[]>('/parking/spots'),
-
-  getSpotsByFloor: (floor: number) =>
-    api.get<ParkingSpot[]>(`/parking/spots?floor=${floor}`),
+  getPlaces: (floor?: number) =>
+    floor != null ? api.get<{ places: ParkingPlace[] }>(`/parking/places?floor=${floor}`) : api.get<{ places: ParkingPlace[] }>('/parking/places'),
+  getPlace: (id: number) => api.get<ParkingPlace>(`/parking/places/${id}`),
+  createBooking: (data: { car_id: number; id_parking: number; type_parking: string; time_start: string; time_end: string; price: number }) =>
+    api.post<{ session: BookingSession }>('/parking/booking', data),
+  getMyBookings: () => api.get<{ sessions: BookingSession[] }>('/parking/booking'),
+  completeBooking: (idSession: number) => api.patch(`/parking/booking/${idSession}/done`),
 };

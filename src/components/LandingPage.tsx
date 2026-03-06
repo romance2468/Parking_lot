@@ -62,7 +62,7 @@ const LandingPage: React.FC = () => {
           </p>
           
           <div className="buttons">
-            <button className="btn-primary-large" onClick={() => navigate('/car-details')}>
+            <button className="btn-primary-large" onClick={() => isLoggedIn ? navigate('/parking-selection') : navigate('/register')}>
               Забронировать сейчас
             </button>
           </div>
