@@ -9,8 +9,12 @@ const ParkingSelection: React.FC = () => {
   const [selectedSpot, setSelectedSpot] = useState<string | null>(null);
   const [vehicleType, setVehicleType] = useState('standard');
   const [duration, setDuration] = useState('2');
+  
+  // State for success modal
+  const [showSuccessModal, setShowSuccessModal] = useState(false);
+  const [bookingDetails, setBookingDetails] = useState<any>(null);
 
-  // Create bubbles (same as other pages)
+  // Create bubbles
   const [bubbles, setBubbles] = useState<Array<{ id: number; size: number; left: number; duration: number; delay: number }>>([]);
 
   useEffect(() => {
@@ -25,6 +29,13 @@ const ParkingSelection: React.FC = () => {
       });
     }
     setBubbles(newBubbles);
+
+    // Load car details from previous page
+    const savedCarDetails = localStorage.getItem('carDetails');
+    if (savedCarDetails) {
+      const carData = JSON.parse(savedCarDetails);
+      console.log('Car details loaded:', carData);
+    }
   }, []);
 
   // Generate parking spots for each floor
@@ -36,7 +47,6 @@ const ParkingSelection: React.FC = () => {
     for (const row of rows) {
       for (let i = 1; i <= spotsPerRow; i++) {
         const spotNumber = `${row}${i.toString().padStart(2, '0')}`;
-        // Random status for demo (in real app, this would come from API)
         const random = Math.random();
         let status: 'available' | 'occupied' | 'selected' | 'disabled' = 'available';
         
@@ -48,7 +58,6 @@ const ParkingSelection: React.FC = () => {
           status = 'disabled';
         }
         
-        // Special spots for different vehicle types
         const spotType = row === 'A' ? 'electric' : (row === 'B' ? 'handicap' : 'standard');
         
         spots.push({
@@ -96,21 +105,54 @@ const ParkingSelection: React.FC = () => {
     }
   };
 
-  const handleContinue = () => {
+  const calculateTotal = () => {
+    const spot = parkingSpots.find(s => s.number === selectedSpot);
+    const pricePerHour = spot?.price || 150;
+    return pricePerHour * parseInt(duration);
+  };
+
+  const handleBooking = () => {
     if (!selectedSpot) {
       alert('Пожалуйста, выберите место');
       return;
     }
     
-    const parkingData = {
-      floor: selectedFloor,
-      spot: selectedSpot,
-      duration: duration,
-      vehicleType: vehicleType
-    };
-    localStorage.setItem('parkingSelection', JSON.stringify(parkingData));
+    // Get car details from localStorage
+    const carDetails = JSON.parse(localStorage.getItem('carDetails') || '{}');
     
-    navigate('/payment');
+    // Create booking details
+    const booking = {
+      spotNumber: selectedSpot,
+      floor: selectedFloor,
+      duration: duration,
+      durationText: getDurationText(duration),
+      pricePerHour: parkingSpots.find(s => s.number === selectedSpot)?.price || 150,
+      totalPrice: calculateTotal(),
+      licensePlate: carDetails.licensePlate || 'Не указан',
+      carModel: carDetails.carModel || 'Не указана',
+      entryTime: new Date().toLocaleString('ru-RU'),
+      bookingId: 'BK-' + Math.floor(Math.random() * 10000).toString().padStart(4, '0')
+    };
+    
+    setBookingDetails(booking);
+    setShowSuccessModal(true);
+    
+    // Save to localStorage
+    localStorage.setItem('lastBooking', JSON.stringify(booking));
+  };
+
+  const closeModal = () => {
+    setShowSuccessModal(false);
+  };
+
+  const getDurationText = (hours: string) => {
+    const h = parseInt(hours);
+    if (h === 1) return '1 час';
+    if (h === 2) return '2 часа';
+    if (h === 3) return '3 часа';
+    if (h === 4) return '4 часа';
+    if (h >= 5 && h <= 20) return `${h} часов`;
+    return `${h} часов`;
   };
 
   return (
@@ -153,7 +195,7 @@ const ParkingSelection: React.FC = () => {
 
           <h2 className="page-title">Выберите место</h2>
 
-          {/* Filters Row with Professional Dropdowns */}
+          {/* Filters Row */}
           <div className="filters-row">
             <div className="filter-group">
               <label>Этаж</label>
@@ -232,10 +274,12 @@ const ParkingSelection: React.FC = () => {
 
           {/* Parking Grid */}
           <div className="parking-grid">
-            {/* Row Labels */}
+            {/* Row Labels - Perfectly Aligned Purple */}
             <div className="row-labels">
               {['A', 'B', 'C', 'D', 'E'].map(row => (
-                <div key={row} className="row-label">{row}</div>
+                <div key={row} className="row-label">
+                  <span className="row-letter">{row}</span>
+                </div>
               ))}
             </div>
 
@@ -294,15 +338,84 @@ const ParkingSelection: React.FC = () => {
             
             <button
               type="button"
-              onClick={handleContinue}
+              onClick={handleBooking}
               className="btn btn-primary"
               disabled={!selectedSpot}
             >
-              Продолжить →
+              Забронировать
             </button>
           </div>
         </div>
       </div>
+
+      {/* Success Modal */}
+      {showSuccessModal && bookingDetails && (
+        <div className="modal-overlay">
+          <div className="modal-container">
+            <div className="modal-content">
+              <div className="modal-header">
+                <div className="success-icon">✅</div>
+                <h3>Бронирование подтверждено!</h3>
+              </div>
+              
+              <div className="modal-body">
+                <div className="booking-details">
+                  <div className="detail-row">
+                    <span className="detail-label">Номер брони:</span>
+                    <span className="detail-value booking-id">{bookingDetails.bookingId}</span>
+                  </div>
+                  
+                  <div className="detail-row">
+                    <span className="detail-label">Место:</span>
+                    <span className="detail-value highlight">{bookingDetails.spotNumber}</span>
+                  </div>
+                  
+                  <div className="detail-row">
+                    <span className="detail-label">Этаж:</span>
+                    <span className="detail-value">{bookingDetails.floor}</span>
+                  </div>
+                  
+                  <div className="detail-row">
+                    <span className="detail-label">Длительность:</span>
+                    <span className="detail-value">{bookingDetails.durationText}</span>
+                  </div>
+                  
+                  <div className="detail-row">
+                    <span className="detail-label">Автомобиль:</span>
+                    <span className="detail-value">{bookingDetails.licensePlate}</span>
+                  </div>
+                  
+                  <div className="detail-row">
+                    <span className="detail-label">Модель:</span>
+                    <span className="detail-value">{bookingDetails.carModel}</span>
+                  </div>
+                  
+                  <div className="detail-row">
+                    <span className="detail-label">Время входа:</span>
+                    <span className="detail-value">{bookingDetails.entryTime}</span>
+                  </div>
+                  
+                  <div className="detail-row total-row">
+                    <span className="detail-label">К оплате:</span>
+                    <span className="detail-value total-price">{bookingDetails.totalPrice} ₽</span>
+                  </div>
+                </div>
+                
+                <div className="qr-placeholder">
+                  <div className="qr-code">📱</div>
+                  <p>Покажите этот QR-код на входе</p>
+                </div>
+              </div>
+              
+              <div className="modal-footer-single">
+                <button onClick={closeModal} className="modal-btn modal-btn-primary modal-btn-full">
+                  Закрыть
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       <style>{`
         * {
@@ -325,7 +438,7 @@ const ParkingSelection: React.FC = () => {
           padding: 20px;
         }
 
-        /* Same background as other pages */
+        /* Background */
         .gray-bg {
           position: absolute;
           top: 0;
@@ -438,7 +551,7 @@ const ParkingSelection: React.FC = () => {
           margin-bottom: 20px;
         }
 
-        /* Filters with Professional Dropdown Arrows */
+        /* Filters */
         .filters-row {
           display: grid;
           grid-template-columns: repeat(3, 1fr);
@@ -556,11 +669,13 @@ const ParkingSelection: React.FC = () => {
           border: 1px solid #e2e8f0;
         }
 
+        /* Row Labels - Perfectly Aligned Purple */
         .row-labels {
           display: flex;
           flex-direction: column;
           gap: 8px;
-          width: 30px;
+          width: 50px;
+          margin-top: 32px;
         }
 
         .row-label {
@@ -568,11 +683,29 @@ const ParkingSelection: React.FC = () => {
           display: flex;
           align-items: center;
           justify-content: center;
-          font-weight: 700;
-          color: #2563eb;
           background: white;
-          border-radius: 8px;
+          border-radius: 10px;
           border: 2px solid #e2e8f0;
+          transition: all 0.2s ease;
+        }
+
+        .row-letter {
+          font-size: 24px;
+          font-weight: 800;
+          color: #8b5cf6;
+          width: 100%;
+          height: 100%;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          background: rgba(139, 92, 246, 0.1);
+          border-radius: 8px;
+        }
+
+        .row-label:hover {
+          transform: scale(1.05);
+          border-color: #8b5cf6;
+          box-shadow: 0 4px 8px rgba(139, 92, 246, 0.2);
         }
 
         .spots-container {
@@ -713,6 +846,179 @@ const ParkingSelection: React.FC = () => {
           cursor: not-allowed;
         }
 
+        /* Modal Styles */
+        .modal-overlay {
+          position: fixed;
+          top: 0;
+          left: 0;
+          right: 0;
+          bottom: 0;
+          background: rgba(0, 0, 0, 0.6);
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          z-index: 1000;
+          animation: fadeIn 0.3s ease;
+          backdrop-filter: blur(5px);
+        }
+
+        @keyframes fadeIn {
+          from { opacity: 0; }
+          to { opacity: 1; }
+        }
+
+        .modal-container {
+          width: 90%;
+          max-width: 500px;
+          animation: slideUp 0.3s ease;
+        }
+
+        @keyframes slideUp {
+          from {
+            transform: translateY(30px);
+            opacity: 0;
+          }
+          to {
+            transform: translateY(0);
+            opacity: 1;
+          }
+        }
+
+        .modal-content {
+          background: white;
+          border-radius: 24px;
+          overflow: hidden;
+          box-shadow: 0 25px 50px rgba(0, 0, 0, 0.3);
+        }
+
+        .modal-header {
+          background: linear-gradient(135deg, #2563eb, #1d4ed8);
+          color: white;
+          padding: 25px;
+          text-align: center;
+        }
+
+        .success-icon {
+          font-size: 50px;
+          margin-bottom: 10px;
+          animation: bounce 0.5s ease;
+        }
+
+        @keyframes bounce {
+          0%, 100% { transform: scale(1); }
+          50% { transform: scale(1.2); }
+        }
+
+        .modal-header h3 {
+          font-size: 22px;
+          font-weight: 600;
+        }
+
+        .modal-body {
+          padding: 25px;
+        }
+
+        .booking-details {
+          margin-bottom: 20px;
+        }
+
+        .detail-row {
+          display: flex;
+          justify-content: space-between;
+          padding: 8px 0;
+          border-bottom: 1px solid #e2e8f0;
+        }
+
+        .detail-row:last-child {
+          border-bottom: none;
+        }
+
+        .detail-label {
+          color: #64748b;
+          font-size: 14px;
+        }
+
+        .detail-value {
+          font-weight: 600;
+          color: #1e293b;
+          font-size: 14px;
+        }
+
+        .detail-value.highlight {
+          color: #2563eb;
+          font-size: 18px;
+        }
+
+        .booking-id {
+          font-family: monospace;
+          font-size: 16px;
+          letter-spacing: 1px;
+          color: #2563eb;
+        }
+
+        .total-row {
+          margin-top: 10px;
+          padding-top: 10px;
+          border-top: 2px solid #2563eb;
+        }
+
+        .total-price {
+          font-size: 22px;
+          font-weight: 700;
+          color: #2563eb;
+        }
+
+        .qr-placeholder {
+          background: #f8fafc;
+          padding: 20px;
+          border-radius: 16px;
+          text-align: center;
+          border: 2px dashed #2563eb;
+        }
+
+        .qr-code {
+          font-size: 60px;
+          margin-bottom: 10px;
+        }
+
+        .qr-placeholder p {
+          color: #475569;
+          font-size: 14px;
+        }
+
+        .modal-footer-single {
+          padding: 20px 25px;
+          background: #f8fafc;
+          border-top: 1px solid #e2e8f0;
+        }
+
+        .modal-btn-full {
+          width: 100%;
+          padding: 14px;
+          font-size: 16px;
+        }
+
+        .modal-btn {
+          padding: 12px;
+          border-radius: 10px;
+          font-size: 14px;
+          font-weight: 500;
+          cursor: pointer;
+          transition: all 0.2s;
+          border: none;
+        }
+
+        .modal-btn-primary {
+          background: #2563eb;
+          color: white;
+        }
+
+        .modal-btn-primary:hover {
+          background: #1d4ed8;
+          transform: translateY(-2px);
+          box-shadow: 0 4px 10px rgba(37, 99, 235, 0.3);
+        }
+
         /* Responsive */
         @media (max-width: 768px) {
           .filters-row {
@@ -726,6 +1032,12 @@ const ParkingSelection: React.FC = () => {
           .row-labels {
             flex-direction: row;
             width: 100%;
+            margin-top: 0;
+            margin-bottom: 10px;
+          }
+          
+          .row-label {
+            width: 50px;
           }
           
           .spots-container {
