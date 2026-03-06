@@ -1,5 +1,5 @@
 import axios from 'axios';
-import { LoginCredentials, RegisterData, User, ParkingSpot, ParkingPlace, BookingSession } from '../types';
+import { LoginCredentials, RegisterData, User, ParkingPlace, BookingSession } from '../types';
 
 // В production за nginx: относительный /api, nginx проксирует на бэкенд
 const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:3001/api';
@@ -30,6 +30,7 @@ export const authAPI = {
   
   getMe: () => api.get<{ user: User }>('/auth/me'),
   getProfile: () => api.get<{ user: User; car: import('../types').Car | null }>('/profile'),
+  getSelectionContext: () => api.get<{ user: User; car: import('../types').Car | null }>('/selection-context'),
   updateProfile: (data: { name: string }) => api.put<{ user: User }>('/auth/me', data),
   updatePassword: (data: { currentPassword: string; newPassword: string }) =>
     api.put<{ message: string }>('/auth/me/password', data),

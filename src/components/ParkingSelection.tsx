@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { authAPI, parkingAPI } from '../api';
 import type { ParkingPlace } from '../types';
 
@@ -38,6 +38,7 @@ function placeToSpot(place: ParkingPlace, selectedId: number | null): SpotDispla
 
 const ParkingSelection: React.FC = () => {
   const navigate = useNavigate();
+  const location = useLocation();
   
   const [selectedFloor, setSelectedFloor] = useState('1');
   const [selectedSpotId, setSelectedSpotId] = useState<number | null>(null);
@@ -46,16 +47,13 @@ const ParkingSelection: React.FC = () => {
   
   // State for success modal
   const [showSuccessModal, setShowSuccessModal] = useState(false);
-  const [bookingDetails, setBookingDetails] = useState<any>(null);
+  const [bookingDetails] = useState<any>(null);
 
-<<<<<<< HEAD
-  // Create bubbles
-=======
   const [places, setPlaces] = useState<ParkingPlace[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [savingBooking, setSavingBooking] = useState(false);
 
->>>>>>> 66c2531d1a9ccaf802d32c96ff3a718f49b8e2ec
   const [bubbles, setBubbles] = useState<Array<{ id: number; size: number; left: number; duration: number; delay: number }>>([]);
 
   const loadPlaces = useCallback((floor: number) => {
@@ -85,54 +83,23 @@ const ParkingSelection: React.FC = () => {
     }
     setBubbles(newBubbles);
 
-    // Load car details from previous page
     const savedCarDetails = localStorage.getItem('carDetails');
     if (savedCarDetails) {
-      const carData = JSON.parse(savedCarDetails);
-      console.log('Car details loaded:', carData);
+      try {
+        JSON.parse(savedCarDetails);
+      } catch (_) {}
     }
   }, []);
 
-<<<<<<< HEAD
-  // Generate parking spots for each floor
-  const generateSpots = (floor: string) => {
-    const rows = ['A', 'B', 'C', 'D', 'E'];
-    const spotsPerRow = 8;
-    const spots = [];
-    
-    for (const row of rows) {
-      for (let i = 1; i <= spotsPerRow; i++) {
-        const spotNumber = `${row}${i.toString().padStart(2, '0')}`;
-        const random = Math.random();
-        let status: 'available' | 'occupied' | 'selected' | 'disabled' = 'available';
-        
-        if (spotNumber === selectedSpot) {
-          status = 'selected';
-        } else if (random < 0.3) {
-          status = 'occupied';
-        } else if (random < 0.4) {
-          status = 'disabled';
-        }
-        
-        const spotType = row === 'A' ? 'electric' : (row === 'B' ? 'handicap' : 'standard');
-        
-        spots.push({
-          id: `${floor}-${spotNumber}`,
-          number: spotNumber,
-          row: row,
-          status,
-          type: spotType,
-          price: spotType === 'electric' ? 300 : (spotType === 'handicap' ? 200 : 150)
-        });
-      }
-    }
-    return spots;
-  };
-=======
   useEffect(() => {
+    const stateCar = (location.state as { car?: { type?: string } })?.car;
+    if (stateCar?.type && (String(stateCar.type).toLowerCase() === 'electric' || String(stateCar.type).toLowerCase().includes('электр'))) {
+      setVehicleType('electric');
+      return;
+    }
     const token = localStorage.getItem('token');
     if (!token) return;
-    authAPI.getProfile()
+    authAPI.getSelectionContext()
       .then((res) => {
         const carType = res.data?.car?.type;
         if (carType && (String(carType).toLowerCase() === 'electric' || String(carType).toLowerCase().includes('электр'))) {
@@ -140,8 +107,7 @@ const ParkingSelection: React.FC = () => {
         }
       })
       .catch(() => {});
-  }, []);
->>>>>>> 66c2531d1a9ccaf802d32c96ff3a718f49b8e2ec
+  }, [location.state]);
 
   useEffect(() => {
     loadPlaces(Number(selectedFloor));
@@ -192,78 +158,51 @@ const ParkingSelection: React.FC = () => {
     }
   };
 
-<<<<<<< HEAD
-  const calculateTotal = () => {
-    const spot = parkingSpots.find(s => s.number === selectedSpot);
-    const pricePerHour = spot?.price || 150;
-    return pricePerHour * parseInt(duration);
-  };
-
-  const handleBooking = () => {
-    if (!selectedSpot) {
-      alert('Пожалуйста, выберите место');
-      return;
-    }
-    
-    // Get car details from localStorage
-    const carDetails = JSON.parse(localStorage.getItem('carDetails') || '{}');
-    
-    // Create booking details
-    const booking = {
-      spotNumber: selectedSpot,
-      floor: selectedFloor,
-      duration: duration,
-      durationText: getDurationText(duration),
-      pricePerHour: parkingSpots.find(s => s.number === selectedSpot)?.price || 150,
-      totalPrice: calculateTotal(),
-      licensePlate: carDetails.licensePlate || 'Не указан',
-      carModel: carDetails.carModel || 'Не указана',
-      entryTime: new Date().toLocaleString('ru-RU'),
-      bookingId: 'BK-' + Math.floor(Math.random() * 10000).toString().padStart(4, '0')
-    };
-    
-    setBookingDetails(booking);
-    setShowSuccessModal(true);
-    
-    // Save to localStorage
-    localStorage.setItem('lastBooking', JSON.stringify(booking));
-  };
-
-  const closeModal = () => {
-    setShowSuccessModal(false);
-  };
-
-  const getDurationText = (hours: string) => {
-    const h = parseInt(hours);
-    if (h === 1) return '1 час';
-    if (h === 2) return '2 часа';
-    if (h === 3) return '3 часа';
-    if (h === 4) return '4 часа';
-    if (h >= 5 && h <= 20) return `${h} часов`;
-    return `${h} часов`;
-=======
   const handleRefresh = () => {
     loadPlaces(Number(selectedFloor));
   };
 
-  const handleContinue = () => {
+  const handleContinue = async () => {
     if (selectedSpotId == null || !selectedSpot) {
       alert('Пожалуйста, выберите место');
       return;
     }
     const spotData = parkingSpots.find((s) => s.id_parking === selectedSpotId);
-    const parkingData = {
-      floor: selectedFloor,
-      spot: selectedSpot,
-      id_parking: selectedSpotId,
-      type_parking: spotData?.type || vehicleType,
-      price: spotData?.price ?? 150,
-      duration,
-      vehicleType,
-    };
-    localStorage.setItem('parkingSelection', JSON.stringify(parkingData));
-    navigate('/payment');
->>>>>>> 66c2531d1a9ccaf802d32c96ff3a718f49b8e2ec
+    const pricePerHour = spotData?.price ?? 150;
+    const hours = Number(duration) || 1;
+    const totalPrice = pricePerHour * hours;
+    const typeParking = spotData?.type || vehicleType;
+
+    setSavingBooking(true);
+    setError(null);
+    try {
+      const profileRes = await authAPI.getProfile();
+      const userCar = profileRes.data?.car;
+      if (!userCar?.id) {
+        setError('Добавьте автомобиль в профиле для бронирования');
+        setSavingBooking(false);
+        return;
+      }
+      const timeStart = new Date();
+      const timeEnd = new Date(timeStart.getTime() + hours * 60 * 60 * 1000);
+      await parkingAPI.createBooking({
+        car_id: userCar.id,
+        id_parking: selectedSpotId,
+        type_parking: typeParking,
+        time_start: timeStart.toISOString(),
+        time_end: timeEnd.toISOString(),
+        price: totalPrice,
+      });
+      navigate('/profile');
+    } catch (err: any) {
+      setError(err.response?.data?.error || err.message || 'Ошибка бронирования');
+    } finally {
+      setSavingBooking(false);
+    }
+  };
+
+  const closeModal = () => {
+    setShowSuccessModal(false);
   };
 
   return (
@@ -403,43 +342,6 @@ const ParkingSelection: React.FC = () => {
 
           {/* Parking Grid */}
           <div className="parking-grid">
-<<<<<<< HEAD
-            {/* Row Labels - Perfectly Aligned Purple */}
-            <div className="row-labels">
-              {['A', 'B', 'C', 'D', 'E'].map(row => (
-                <div key={row} className="row-label">
-                  <span className="row-letter">{row}</span>
-                </div>
-              ))}
-            </div>
-
-            {/* Parking Spots */}
-            <div className="spots-container">
-              {Array.from({ length: 8 }, (_, i) => i + 1).map(spotNum => (
-                <div key={spotNum} className="spot-column">
-                  <div className="column-number">{spotNum}</div>
-                  {['A', 'B', 'C', 'D', 'E'].map(row => {
-                    const spot = parkingSpots.find(s => s.number === `${row}${spotNum.toString().padStart(2, '0')}`);
-                    if (!spot) return null;
-                    
-                    return (
-                      <div
-                        key={`${row}${spotNum}`}
-                        className={`parking-spot ${spot.status} ${spot.type}`}
-                        style={{
-                          backgroundColor: getSpotColor(spot.status, spot.type),
-                          border: getSpotBorder(spot.status, spot.type),
-                          cursor: spot.status === 'available' ? 'pointer' : 'not-allowed'
-                        }}
-                        onClick={() => handleSpotClick(spot)}
-                      >
-                        <span className="spot-number">{spot.number}</span>
-                        {spot.type === 'electric' && <span className="spot-icon">⚡</span>}
-                        {spot.type === 'handicap' && <span className="spot-icon">♿</span>}
-                      </div>
-                    );
-                  })}
-=======
             {loading ? (
               <div style={{ gridColumn: '1 / -1', textAlign: 'center', padding: '24px', color: '#64748b' }}>
                 Загрузка мест…
@@ -450,7 +352,6 @@ const ParkingSelection: React.FC = () => {
                   {['A', 'B', 'C', 'D', 'E'].map(row => (
                     <div key={row} className="row-label">{row}</div>
                   ))}
->>>>>>> 66c2531d1a9ccaf802d32c96ff3a718f49b8e2ec
                 </div>
                 <div className="spots-container">
                   {Array.from({ length: 8 }, (_, i) => i + 1).map(spotNum => (
@@ -513,7 +414,7 @@ const ParkingSelection: React.FC = () => {
           <div className="button-group">
             <button
               type="button"
-              onClick={() => navigate(-1)}
+              onClick={() => navigate('/')}
               className="btn btn-outline"
             >
               ← Назад
@@ -521,11 +422,11 @@ const ParkingSelection: React.FC = () => {
             
             <button
               type="button"
-              onClick={handleBooking}
+              onClick={handleContinue}
               className="btn btn-primary"
-              disabled={!selectedSpot}
+              disabled={!selectedSpot || savingBooking}
             >
-              Забронировать
+              {savingBooking ? 'Сохранение…' : 'Продолжить'}
             </button>
           </div>
         </div>

@@ -82,10 +82,10 @@ router.get('/booking', authenticateToken, (req: Request, res: Response) => {
 
   carService.getCarByUserId(userId)
     .then((car) => {
-      if (!car) return res.json({ sessions: [] });
+      if (!car) return [];
       return parkingService.getBookingSessionsByCarId(car.id);
     })
-    .then((sessions) => res.json({ sessions }))
+    .then((sessions) => res.json({ sessions: sessions ?? [] }))
     .catch((err) => res.status(500).json({ error: err.message }));
 });
 

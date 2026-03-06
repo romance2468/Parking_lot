@@ -1,8 +1,11 @@
 import React, { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
+import { carAPI } from '../api';
 
 const CarDetails: React.FC = () => {
   const navigate = useNavigate();
+  const location = useLocation();
+  const state = location.state as { fromRegister?: boolean; token?: string; userId?: number } | undefined;
   
   // Form state
   const [licensePlate, setLicensePlate] = useState('');
@@ -18,7 +21,12 @@ const CarDetails: React.FC = () => {
   const [bubbles, setBubbles] = useState<Array<{ id: number; size: number; left: number; duration: number; delay: number }>>([]);
 
   useEffect(() => {
-    // Generate bubbles (same as login page)
+    if (state?.token) {
+      localStorage.setItem('token', state.token);
+    }
+  }, [state?.token]);
+
+  useEffect(() => {
     const newBubbles = [];
     for (let i = 0; i < 40; i++) {
       newBubbles.push({
@@ -39,23 +47,22 @@ const CarDetails: React.FC = () => {
     { id: 'electric', label: 'Электро', icon: '⚡' }
   ];
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    
+
     if (!licensePlate.trim()) {
       setError('Пожалуйста, введите номер автомобиля');
       return;
     }
-    
+
     if (!agreeToTerms) {
       setError('Пожалуйста, согласитесь с условиями');
       return;
     }
-    
+
     setError('');
     setIsSubmitting(true);
-    
-    // Save car details to localStorage
+
     const carDetails = {
       licensePlate,
       carModel,
@@ -64,15 +71,31 @@ const CarDetails: React.FC = () => {
       additionalNotes,
       entryTime: new Date().toISOString()
     };
-    
     localStorage.setItem('carDetails', JSON.stringify(carDetails));
-    
-    // Simulate loading
-    setTimeout(() => {
-      setIsSubmitting(false);
-      // THIS LINE NAVIGATES TO PARKING SELECTION - MAKE SURE IT'S CORRECT
-      navigate('/parking-selection');
-    }, 1000);
+
+    const token = localStorage.getItem('token');
+    if (token) {
+      try {
+        const res = await carAPI.createCar({
+          autoNumber: licensePlate.trim(),
+          type: selectedVehicleType,
+          mark: carModel.trim(),
+          color: carColor.trim(),
+          notes: additionalNotes.trim()
+        });
+        setIsSubmitting(false);
+        const savedCar = res.data?.car;
+        navigate('/parking-selection', { state: savedCar ? { car: savedCar } : undefined });
+        return;
+      } catch (err: any) {
+        setError(err.response?.data?.error || err.message || 'Ошибка сохранения автомобиля');
+        setIsSubmitting(false);
+        return;
+      }
+    }
+
+    setIsSubmitting(false);
+    navigate('/parking-selection');
   };
 
   return (

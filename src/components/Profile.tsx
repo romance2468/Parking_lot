@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { authAPI, carAPI } from '../api';
-import { User, Car } from '../types';
+import { authAPI, carAPI, parkingAPI } from '../api';
+import { User, Car, BookingSession } from '../types';
 
 const vehicleTypeLabels: Record<string, string> = {
   sedan: 'Седан',
@@ -34,6 +34,7 @@ const Profile: React.FC = () => {
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [savingPassword, setSavingPassword] = useState(false);
+  const [sessions, setSessions] = useState<BookingSession[]>([]);
 
   const [bubbles, setBubbles] = useState<Array<{ id: number; size: number; left: number; duration: number; delay: number }>>([]);
 
@@ -80,12 +81,28 @@ const Profile: React.FC = () => {
     authAPI.getProfile()
       .then((res) => {
         if (cancelled) return;
-        const d = res.data;
+        const d = res?.data;
+        if (!d?.user) {
+          setError('Некорректный ответ сервера');
+          return;
+        }
         const u: User = { id: d.user.id, name: d.user.name, email: d.user.email, role: 'user' };
         setUser(u);
         setName(u.name);
         setEmail(u.email);
-        const c = d.car ? { ...d.car, mark: d.car.mark ?? '', color: d.car.color ?? '', notes: d.car.notes ?? '', created_at: d.car.created_at ?? '' } as Car : null;
+        const rawCar = d.car as Record<string, unknown> | null | undefined;
+        const c: Car | null = rawCar && (rawCar.id != null || rawCar.auto_number != null)
+          ? {
+              id: Number(rawCar.id),
+              user_id: Number(rawCar.user_id ?? rawCar.userId ?? 0),
+              type: String(rawCar.type ?? 'sedan'),
+              mark: String(rawCar.mark ?? ''),
+              auto_number: String(rawCar.auto_number ?? rawCar.autoNumber ?? ''),
+              color: String(rawCar.color ?? ''),
+              notes: String(rawCar.notes ?? ''),
+              created_at: String(rawCar.created_at ?? rawCar.createdAt ?? ''),
+            }
+          : null;
         setCar(c);
         if (c) {
           setAutoNumber(c.auto_number || '');
@@ -94,6 +111,13 @@ const Profile: React.FC = () => {
           setSelectedVehicleType(c.type || 'sedan');
           setNotes(c.notes || '');
         }
+        parkingAPI.getMyBookings()
+          .then((bookingsRes) => {
+            if (!cancelled && bookingsRes?.data) setSessions(bookingsRes.data.sessions ?? []);
+          })
+          .catch(() => {
+            if (!cancelled) setSessions([]);
+          });
       })
       .catch((err: any) => {
         if (cancelled) return;
@@ -366,7 +390,7 @@ const Profile: React.FC = () => {
             </div>
 
             <div className="dashboard-actions">
-              <button type="button" className="btn-outline" onClick={() => navigate(-1)}>
+              <button type="button" className="btn-outline" onClick={() => navigate('/')}>
                 ← Назад
               </button>
             </div>
@@ -541,9 +565,59 @@ const Profile: React.FC = () => {
             )}
 
             {!editProfile && !editCar && !editPassword && (
-              <div className="edit-placeholder">
-                <p>Нажмите ✏️ рядом с блоком в дашборде, чтобы отредактировать данные или пароль.</p>
-              </div>
+              <>
+                <div className="edit-placeholder">
+                  <p>Нажмите ✏️ рядом с блоком в дашборде, чтобы отредактировать данные или пароль.</p>
+                </div>
+
+                <div className="profile-history-block">
+                  {sessions.filter(s => s.is_done_session === 0).length > 0 && (
+                    <div className="history-card">
+                      <h3 className="history-card-title">Текущая сессия</h3>
+                      {sessions.filter(s => s.is_done_session === 0).slice(0, 1).map((s) => (
+                        <dl key={s.id_session} className="dashboard-list">
+                          <div className="dashboard-row">
+                            <dt>Место</dt>
+                            <dd>№ {s.id_parking}</dd>
+                          </div>
+                          <div className="dashboard-row">
+                            <dt>Начало</dt>
+                            <dd>{new Date(s.time_start).toLocaleString('ru-RU', { dateStyle: 'short', timeStyle: 'short' })}</dd>
+                          </div>
+                          <div className="dashboard-row">
+                            <dt>Окончание</dt>
+                            <dd>{new Date(s.time_end).toLocaleString('ru-RU', { dateStyle: 'short', timeStyle: 'short' })}</dd>
+                          </div>
+                          <div className="dashboard-row">
+                            <dt>Сумма</dt>
+                            <dd>{s.price} ₽</dd>
+                          </div>
+                        </dl>
+                      ))}
+                    </div>
+                  )}
+
+                  <div className="history-card">
+                    <h3 className="history-card-title">История бронирований</h3>
+                    {sessions.length === 0 ? (
+                      <p className="dashboard-hint">Нет бронирований</p>
+                    ) : (
+                      <ul className="dashboard-sessions-list">
+                        {sessions.map((s) => (
+                          <li key={s.id_session} className={`dashboard-session-item ${s.is_done_session ? 'done' : 'active'}`}>
+                            <span className="session-place">Место №{s.id_parking}</span>
+                            <span className="session-time">
+                              {new Date(s.time_start).toLocaleString('ru-RU', { dateStyle: 'short', timeStyle: 'short' })} – {new Date(s.time_end).toLocaleString('ru-RU', { dateStyle: 'short', timeStyle: 'short' })}
+                            </span>
+                            <span className="session-price">{s.price} ₽</span>
+                            <span className="session-status">{s.is_done_session ? 'Завершена' : 'Активна'}</span>
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+                  </div>
+                </div>
+              </>
             )}
           </main>
         </div>
@@ -576,6 +650,14 @@ const Profile: React.FC = () => {
         .dashboard-row dt { font-size: 12px; color: #64748b; font-weight: 500; }
         .dashboard-row dd { font-size: 14px; color: #1e293b; margin: 0; }
         .dashboard-hint { font-size: 12px; color: #64748b; margin: 0; }
+        .dashboard-sessions-list { list-style: none; margin: 0; padding: 0; }
+        .dashboard-session-item { font-size: 12px; padding: 10px 12px; margin-bottom: 8px; background: white; border-radius: 10px; border: 1px solid #e2e8f0; display: grid; grid-template-columns: 1fr 1fr auto; gap: 8px; align-items: center; }
+        .dashboard-session-item.active { border-left: 4px solid #2563eb; }
+        .dashboard-session-item.done { opacity: 0.85; }
+        .session-place { font-weight: 600; color: #334155; }
+        .session-time { grid-column: 1 / -1; color: #64748b; }
+        .session-price { font-weight: 600; color: #16a34a; }
+        .session-status { font-size: 11px; color: #64748b; }
         .dashboard-actions { margin-top: 20px; }
         .error-message { background: #fee2e2; border: 1px solid #fecaca; color: #dc2626; padding: 12px 16px; border-radius: 12px; margin-bottom: 16px; font-size: 14px; display: flex; align-items: center; gap: 8px; }
         .error-icon { font-size: 18px; }
@@ -602,6 +684,9 @@ const Profile: React.FC = () => {
         .btn-outline { padding: 12px 20px; background: white; border: 2px solid #2563eb; color: #2563eb; border-radius: 12px; font-size: 14px; font-weight: 500; cursor: pointer; transition: all 0.2s; }
         .btn-outline:hover { background: #f0f4ff; }
         .edit-placeholder { color: #64748b; font-size: 14px; padding: 24px 0; text-align: center; }
+        .profile-history-block { margin-top: 24px; }
+        .history-card { background: #f8fafc; border-radius: 16px; padding: 16px; margin-bottom: 16px; border: 1px solid #e2e8f0; }
+        .history-card-title { font-size: 14px; font-weight: 600; color: #334155; margin: 0 0 12px 0; }
         .loading-text { text-align: center; color: #64748b; padding: 40px; }
         @media (max-width: 768px) { .profile-layout { flex-direction: column; } .profile-dashboard { flex: 1 1 auto; width: 100%; } .form-row { grid-template-columns: 1fr; } .vehicle-types { grid-template-columns: repeat(2, 1fr); } }
       `}</style>
