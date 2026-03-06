@@ -1,20 +1,47 @@
 services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: parking
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
   backend:
     build:
       context: .
       dockerfile: Dockerfile.backend
     ports:
       - "3001:3001"
-    volumes:
-      - ./parking.db:/app/parking.db
     environment:
       PORT: 3001
+      PGHOST: postgres
+      PGPORT: 5432
+      PGUSER: postgres
+      PGPASSWORD: postgres
+      PGDATABASE: parking
+    depends_on:
+      postgres:
+        condition: service_healthy
 
+  # Фронтенд: React build, отдаётся из образа nginx
   frontend:
     build:
       context: .
       dockerfile: Dockerfile.frontend
+    image: parking-lot-frontend:nginx
     ports:
       - "80:80"
     depends_on:
       - backend
+
+volumes:
+  postgres_data:

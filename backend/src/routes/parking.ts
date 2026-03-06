@@ -32,7 +32,7 @@ router.get('/places', (req: Request, res: Response) => {
 
 // Одно место по id
 router.get('/places/:id', (req: Request, res: Response) => {
-  const id = parseInt(req.params.id, 10);
+  const id = parseInt(String(req.params.id), 10);
   if (isNaN(id)) return res.status(400).json({ error: 'Некорректный id' });
   parkingService.getPlaceById(id)
     .then((place) => {
@@ -91,7 +91,7 @@ router.get('/booking', authenticateToken, (req: Request, res: Response) => {
 
 // Завершить сессию
 router.patch('/booking/:id/done', authenticateToken, (req: Request, res: Response) => {
-  const idSession = parseInt(req.params.id, 10);
+  const idSession = parseInt(String(req.params.id), 10);
   if (isNaN(idSession)) return res.status(400).json({ error: 'Некорректный id сессии' });
   parkingService.completeSession(idSession)
     .then(() => res.json({ message: 'Сессия завершена' }))

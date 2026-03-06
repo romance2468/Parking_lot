@@ -1,5 +1,5 @@
 # syntax=docker/dockerfile:1
-# Сборка фронтенда
+# Фронтенд: сборка React, финальный образ — nginx (статику отдаёт nginx)
 FROM node:20-alpine AS build
 
 WORKDIR /app
@@ -15,10 +15,9 @@ COPY . .
 ENV REACT_APP_API_URL=/api
 RUN npm run build
 
-# Финальный образ с nginx
+# Финальный образ: только nginx и статика фронтенда
 FROM nginx:alpine
 
-# Копируем собранный фронтенд
 COPY --from=build /app/build /usr/share/nginx/html
 
 # Конфиг nginx (прокси /api на бэкенд — хост backend задаётся при запуске)

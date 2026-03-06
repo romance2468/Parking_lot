@@ -14,7 +14,9 @@ export interface Car {
 export type VehicleType = 'sedan' | 'suv' | 'hatchback' | 'electric';
 
 export class CarService {
-  private db = dbManager.getDb();
+  private get pool() {
+    return dbManager.getPool();
+  }
 
   async createCar(
     userId: number,
@@ -24,56 +26,38 @@ export class CarService {
     color: string,
     notes: string
   ): Promise<Car> {
-    return new Promise((resolve, reject) => {
-      const db = this.db;
-      db.run(
-        `INSERT INTO cars (user_id, auto_number, type, mark, color, notes) 
-         VALUES (?, ?, ?, ?, ?, ?)`,
-        [userId, autoNumber, type, mark || '', color || '', notes || ''],
-        function (err: Error | null) {
-          if (err) {
-            return reject(err);
-          }
-
-          const newCar: Car = {
-            id: this.lastID,
-            user_id: userId,
-            type,
-            mark: mark || '',
-            auto_number: autoNumber,
-            color: color || '',
-            notes: notes || '',
-            created_at: new Date().toISOString()
-          };
-
-          resolve(newCar);
-        }
-      );
-    });
+    const result = await this.pool.query(
+      `INSERT INTO cars (user_id, auto_number, type, mark, color, notes)
+       VALUES ($1, $2, $3, $4, $5, $6) RETURNING id, user_id, type, mark, auto_number, color, notes, created_at`,
+      [userId, autoNumber, type, mark || '', color || '', notes || '']
+    );
+    const row = result.rows[0];
+    return {
+      id: row.id,
+      user_id: row.user_id,
+      type: row.type,
+      mark: row.mark || '',
+      auto_number: row.auto_number,
+      color: row.color || '',
+      notes: row.notes || '',
+      created_at: row.created_at ? new Date(row.created_at).toISOString() : new Date().toISOString()
+    };
   }
 
   async getCarByUserId(userId: number): Promise<Car | null> {
-    return new Promise((resolve, reject) => {
-      this.db.get('SELECT * FROM cars WHERE user_id = ?', [userId], (err, row: any) => {
-        if (err) {
-          return reject(err);
-        }
-        if (!row) {
-          return resolve(null);
-        }
-        const car: Car = {
-          id: row.id ?? row.ID,
-          user_id: row.user_id ?? row.USER_ID ?? userId,
-          type: row.type ?? row.TYPE ?? 'sedan',
-          mark: row.mark ?? row.MARK ?? '',
-          auto_number: row.auto_number ?? row.AUTO_NUMBER ?? '',
-          color: row.color ?? row.COLOR ?? '',
-          notes: row.notes ?? row.NOTES ?? '',
-          created_at: row.created_at ?? row.CREATED_AT ?? new Date().toISOString()
-        };
-        resolve(car);
-      });
-    });
+    const result = await this.pool.query('SELECT * FROM cars WHERE user_id = $1', [userId]);
+    const row = result.rows[0];
+    if (!row) return null;
+    return {
+      id: row.id,
+      user_id: row.user_id,
+      type: row.type || 'sedan',
+      mark: row.mark || '',
+      auto_number: row.auto_number || '',
+      color: row.color || '',
+      notes: row.notes || '',
+      created_at: row.created_at ? new Date(row.created_at).toISOString() : ''
+    };
   }
 
   async updateCar(
@@ -85,49 +69,23 @@ export class CarService {
     color: string,
     notes: string
   ): Promise<Car> {
-    return new Promise((resolve, reject) => {
-      this.db.run(
-        `UPDATE cars SET auto_number = ?, type = ?, mark = ?, color = ?, notes = ?
-         WHERE id = ? AND user_id = ?`,
-        [autoNumber, type, mark || '', color || '', notes || '', carId, userId],
-        function (err) {
-          if (err) {
-            return reject(err);
-          }
-
-          if (this.changes === 0) {
-            return reject(new Error('Автомобиль не найден или не принадлежит пользователю'));
-          }
-
-          const updatedCar: Car = {
-            id: carId,
-            user_id: userId,
-            type,
-            mark: mark || '',
-            auto_number: autoNumber,
-            color: color || '',
-            notes: notes || '',
-            created_at: new Date().toISOString()
-          };
-
-          resolve(updatedCar);
-        }
-      );
-    });
+    const result = await this.pool.query(
+      `UPDATE cars SET auto_number = $1, type = $2, mark = $3, color = $4, notes = $5
+       WHERE id = $6 AND user_id = $7`,
+      [autoNumber, type, mark || '', color || '', notes || '', carId, userId]
+    );
+    if (result.rowCount === 0) {
+      throw new Error('Автомобиль не найден или не принадлежит пользователю');
+    }
+    const updated = await this.getCarByUserId(userId);
+    if (!updated) throw new Error('Автомобиль не найден');
+    return { ...updated, id: carId, type, mark, auto_number: autoNumber, color, notes };
   }
 
   async deleteCar(carId: number, userId: number): Promise<void> {
-    return new Promise((resolve, reject) => {
-      const db = this.db;
-      db.run('DELETE FROM cars WHERE id = ? AND user_id = ?', [carId, userId], function (err) {
-        if (err) {
-          return reject(err);
-        }
-        if (this.changes === 0) {
-          return reject(new Error('Автомобиль не найден или не принадлежит пользователю'));
-        }
-        resolve();
-      });
-    });
+    const result = await this.pool.query('DELETE FROM cars WHERE id = $1 AND user_id = $2', [carId, userId]);
+    if (result.rowCount === 0) {
+      throw new Error('Автомобиль не найден или не принадлежит пользователю');
+    }
   }
 }

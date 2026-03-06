@@ -1,145 +1,111 @@
-import sqlite3 from 'sqlite3';
-import path from 'path';
-import { Database } from 'sqlite3';
+import { Pool } from 'pg';
 
-const DB_PATH = path.join(__dirname, '..', '..', '..', 'parking.db');
+const pool = new Pool({
+  host: process.env.PGHOST || process.env.DB_HOST || 'localhost',
+  port: parseInt(process.env.PGPORT || process.env.DB_PORT || '5432', 10),
+  user: process.env.PGUSER || process.env.DB_USER || 'postgres',
+  password: process.env.PGPASSWORD || process.env.DB_PASSWORD || 'postgres',
+  database: process.env.PGDATABASE || process.env.DB_NAME || 'parking',
+});
 
 class DatabaseManager {
-  private db: Database;
+  private pool: Pool = pool;
+  private initialized = false;
 
-  constructor() {
-    this.db = new sqlite3.Database(DB_PATH, (err) => {
-      if (err) {
-        console.error('Ошибка подключения к базе данных:', err.message);
-      } else {
-        console.log('Подключено к базе данных SQLite');
-        this.db.run('PRAGMA foreign_keys = ON');
-        this.initTables();
-      }
-    });
+  async initialize(): Promise<void> {
+    if (this.initialized) return;
+    try {
+      await this.pool.query('SELECT 1');
+      await this.initTables();
+      await this.seedParkingPlacesIfEmpty();
+      this.initialized = true;
+      console.log('Подключено к PostgreSQL');
+    } catch (err: any) {
+      console.error('Ошибка подключения к PostgreSQL:', err.message);
+      throw err;
+    }
   }
 
-  private initTables(): void {
-    this.db.serialize(() => {
-      const createUsersTable = `
-        CREATE TABLE IF NOT EXISTS users (
-          id INTEGER PRIMARY KEY AUTOINCREMENT,
-          user_name TEXT NOT NULL,
-          user_email TEXT UNIQUE NOT NULL,
-          password_hash TEXT NOT NULL,
-          created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-        )
-      `;
+  private async initTables(): Promise<void> {
+    await this.pool.query(`
+      CREATE TABLE IF NOT EXISTS users (
+        id SERIAL PRIMARY KEY,
+        user_name TEXT NOT NULL,
+        user_email TEXT UNIQUE NOT NULL,
+        password_hash TEXT NOT NULL,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+    console.log('Таблица users готова');
 
-      const createCarsTable = `
-        CREATE TABLE IF NOT EXISTS cars (
-          id INTEGER PRIMARY KEY AUTOINCREMENT,
-          user_id INTEGER NOT NULL,
-          type TEXT NOT NULL,
-          mark TEXT,
-          auto_number TEXT NOT NULL,
-          color TEXT,
-          notes TEXT,
-          created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-          FOREIGN KEY (user_id) REFERENCES users(id)
-        )
-      `;
+    await this.pool.query(`
+      CREATE TABLE IF NOT EXISTS cars (
+        id SERIAL PRIMARY KEY,
+        user_id INTEGER NOT NULL REFERENCES users(id),
+        type TEXT NOT NULL,
+        mark TEXT,
+        auto_number TEXT NOT NULL,
+        color TEXT,
+        notes TEXT,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+    console.log('Таблица cars готова');
 
-      const createParkingPlacesTable = `
-        CREATE TABLE IF NOT EXISTS parking_places (
-          id_parking INTEGER PRIMARY KEY AUTOINCREMENT,
-          floor INTEGER NOT NULL,
-          section TEXT NOT NULL,
-          place_num INTEGER NOT NULL,
-          is_free INTEGER NOT NULL DEFAULT 1,
-          type_parking TEXT NOT NULL DEFAULT 'standard'
-        )
-      `;
+    await this.pool.query(`
+      CREATE TABLE IF NOT EXISTS parking_places (
+        id_parking SERIAL PRIMARY KEY,
+        floor INTEGER NOT NULL,
+        section TEXT NOT NULL,
+        place_num INTEGER NOT NULL,
+        is_free BOOLEAN NOT NULL DEFAULT true,
+        type_parking TEXT NOT NULL DEFAULT 'standard'
+      )
+    `);
+    console.log('Таблица parking_places готова');
 
-      const createBookingSessionsTable = `
-        CREATE TABLE IF NOT EXISTS booking_sessions (
-          id_session INTEGER PRIMARY KEY AUTOINCREMENT,
-          car_id INTEGER NOT NULL,
-          id_parking INTEGER NOT NULL,
-          type_parking TEXT NOT NULL,
-          time_start DATETIME NOT NULL,
-          time_end DATETIME NOT NULL,
-          price REAL NOT NULL,
-          is_done_session INTEGER NOT NULL DEFAULT 0,
-          FOREIGN KEY (car_id) REFERENCES cars(id),
-          FOREIGN KEY (id_parking) REFERENCES parking_places(id_parking)
-        )
-      `;
-
-      this.db.run(createUsersTable, (err) => {
-        if (err) {
-          console.error('Ошибка создания таблицы users:', err.message);
-        } else {
-          console.log('Таблица users готова');
-        }
-      });
-
-      this.db.run(createCarsTable, (err) => {
-        if (err) {
-          console.error('Ошибка создания таблицы cars:', err.message);
-        } else {
-          console.log('Таблица cars готова');
-        }
-      });
-
-      this.db.run(createParkingPlacesTable, (err) => {
-        if (err) {
-          console.error('Ошибка создания таблицы parking_places:', err.message);
-        } else {
-          console.log('Таблица parking_places готова');
-        }
-      });
-
-      this.db.run(createBookingSessionsTable, (err) => {
-        if (err) {
-          console.error('Ошибка создания таблицы booking_sessions:', err.message);
-        } else {
-          console.log('Таблица booking_sessions готова');
-        }
-      });
-
-      this.seedParkingPlacesIfEmpty();
-    });
+    await this.pool.query(`
+      CREATE TABLE IF NOT EXISTS booking_sessions (
+        id_session SERIAL PRIMARY KEY,
+        car_id INTEGER NOT NULL REFERENCES cars(id),
+        id_parking INTEGER NOT NULL REFERENCES parking_places(id_parking),
+        type_parking TEXT NOT NULL,
+        time_start TIMESTAMP NOT NULL,
+        time_end TIMESTAMP NOT NULL,
+        price REAL NOT NULL,
+        is_done_session BOOLEAN NOT NULL DEFAULT false
+      )
+    `);
+    console.log('Таблица booking_sessions готова');
   }
 
-  private seedParkingPlacesIfEmpty(): void {
-    this.db.get('SELECT COUNT(*) as cnt FROM parking_places', [], (err, row: { cnt: number }) => {
-      if (err || !row || row.cnt > 0) return;
-      const sections = ['A', 'B', 'C', 'D', 'E'];
-      const types: Array<'standard' | 'electric' | 'handicap'> = ['standard', 'standard', 'standard', 'electric', 'handicap'];
-      for (let floor = 1; floor <= 4; floor++) {
-        for (let s = 0; s < sections.length; s++) {
-          const section = sections[s];
-          const typeParking = types[s];
-          for (let place = 1; place <= 8; place++) {
-            this.db.run(
-              'INSERT INTO parking_places (floor, section, place_num, is_free, type_parking) VALUES (?, ?, ?, 1, ?)',
-              [floor, section, place, typeParking]
-            );
-          }
+  private async seedParkingPlacesIfEmpty(): Promise<void> {
+    const r = await this.pool.query('SELECT COUNT(*)::int as cnt FROM parking_places');
+    if (r.rows[0]?.cnt > 0) return;
+    const sections = ['A', 'B', 'C', 'D', 'E'];
+    const types: Array<'standard' | 'electric' | 'handicap'> = ['standard', 'standard', 'standard', 'electric', 'handicap'];
+    for (let floor = 1; floor <= 4; floor++) {
+      for (let s = 0; s < sections.length; s++) {
+        const section = sections[s];
+        const typeParking = types[s];
+        for (let place = 1; place <= 8; place++) {
+          await this.pool.query(
+            'INSERT INTO parking_places (floor, section, place_num, is_free, type_parking) VALUES ($1, $2, $3, true, $4)',
+            [floor, section, place, typeParking]
+          );
         }
       }
-      console.log('Добавлены тестовые парковочные места');
-    });
+    }
+    console.log('Добавлены тестовые парковочные места');
   }
 
-  public getDb(): Database {
-    return this.db;
+  getPool(): Pool {
+    return this.pool;
   }
 
-  public close(): void {
-    this.db.close((err) => {
-      if (err) {
-        console.error('Ошибка закрытия базы данных:', err.message);
-      } else {
-        console.log('Соединение с базой данных закрыто');
-      }
-    });
+  async close(): Promise<void> {
+    await this.pool.end();
+    console.log('Соединение с PostgreSQL закрыто');
   }
 }
 

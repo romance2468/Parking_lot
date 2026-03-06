@@ -663,32 +663,34 @@ const Profile: React.FC = () => {
         .error-icon { font-size: 18px; }
         .success-message { background: #dcfce7; border: 1px solid #bbf7d0; color: #166534; padding: 12px 16px; border-radius: 12px; margin-bottom: 16px; font-size: 14px; display: flex; align-items: center; gap: 8px; }
         .success-icon { font-size: 18px; }
-        .edit-panel { margin-top: 0; }
-        .section-title { font-size: 16px; font-weight: 600; color: #334155; margin-bottom: 16px; }
-        .form-group { margin-bottom: 16px; }
-        .form-group label { display: block; margin-bottom: 6px; color: #4b5563; font-size: 14px; font-weight: 500; }
-        .form-input { width: 100%; padding: 12px 14px; border: 2px solid #e2e8f0; border-radius: 12px; font-size: 15px; outline: none; background: #f8fafc; transition: all 0.2s; }
-        .form-input:focus { border-color: #2563eb; box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.2); }
+        .edit-panel { margin-top: 0; margin-left: auto; margin-right: auto; max-width: 320px; padding: 24px; box-sizing: border-box; }
+        .edit-panel form { display: flex; flex-direction: column; gap: 0; }
+        .section-title { font-size: 15px; font-weight: 600; color: #334155; margin-bottom: 12px; }
+        .form-group { margin-bottom: 12px; margin-left: 0; margin-right: 0; }
+        .form-group label { display: block; margin-bottom: 4px; color: #4b5563; font-size: 13px; font-weight: 500; }
+        .form-input { width: 100%; max-width: 100%; box-sizing: border-box; padding: 8px 10px; border: 1px solid #e2e8f0; border-radius: 8px; font-size: 14px; outline: none; background: #f8fafc; transition: all 0.2s; }
+        .form-input:focus { border-color: #2563eb; box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.2); }
         .form-input-readonly { background: #f1f5f9; color: #64748b; cursor: default; }
-        .form-textarea { resize: vertical; font-family: inherit; min-height: 60px; }
-        .form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+        .form-textarea { resize: vertical; font-family: inherit; min-height: 48px; }
+        .form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 12px; }
+        .form-row .form-group { margin-bottom: 0; }
         .vehicle-types { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
-        .vehicle-type-btn { padding: 10px 0; border: 2px solid #e2e8f0; border-radius: 12px; background: white; color: #4b5563; font-size: 13px; font-weight: 500; cursor: pointer; transition: all 0.2s; display: flex; flex-direction: column; align-items: center; gap: 4px; }
+        .vehicle-type-btn { padding: 6px 4px; border: 1px solid #e2e8f0; border-radius: 8px; background: white; color: #4b5563; font-size: 12px; font-weight: 500; cursor: pointer; transition: all 0.2s; display: flex; flex-direction: column; align-items: center; gap: 2px; }
         .vehicle-type-btn:hover { border-color: #2563eb; background: #f0f4ff; }
         .vehicle-type-btn.selected { border-color: #2563eb; background: rgba(37, 99, 235, 0.1); color: #2563eb; }
-        .vehicle-icon { font-size: 20px; }
-        .submit-btn { padding: 12px 24px; background: #2563eb; color: white; border: none; border-radius: 12px; font-size: 15px; font-weight: 600; cursor: pointer; transition: all 0.2s; }
+        .vehicle-icon { font-size: 16px; }
+        .submit-btn { padding: 8px 16px; background: #2563eb; color: white; border: none; border-radius: 8px; font-size: 14px; font-weight: 600; cursor: pointer; transition: all 0.2s; }
         .submit-btn:hover:not(:disabled) { background: #1d4ed8; transform: translateY(-1px); }
         .submit-btn:disabled { opacity: 0.7; cursor: not-allowed; }
-        .edit-actions { display: flex; gap: 12px; margin-top: 16px; }
-        .btn-outline { padding: 12px 20px; background: white; border: 2px solid #2563eb; color: #2563eb; border-radius: 12px; font-size: 14px; font-weight: 500; cursor: pointer; transition: all 0.2s; }
+        .edit-actions { display: flex; gap: 12px; margin-top: 12px; }
+        .btn-outline { padding: 8px 16px; background: white; border: 1px solid #2563eb; color: #2563eb; border-radius: 8px; font-size: 13px; font-weight: 500; cursor: pointer; transition: all 0.2s; }
         .btn-outline:hover { background: #f0f4ff; }
         .edit-placeholder { color: #64748b; font-size: 14px; padding: 24px 0; text-align: center; }
         .profile-history-block { margin-top: 24px; }
         .history-card { background: #f8fafc; border-radius: 16px; padding: 16px; margin-bottom: 16px; border: 1px solid #e2e8f0; }
         .history-card-title { font-size: 14px; font-weight: 600; color: #334155; margin: 0 0 12px 0; }
         .loading-text { text-align: center; color: #64748b; padding: 40px; }
-        @media (max-width: 768px) { .profile-layout { flex-direction: column; } .profile-dashboard { flex: 1 1 auto; width: 100%; } .form-row { grid-template-columns: 1fr; } .vehicle-types { grid-template-columns: repeat(2, 1fr); } }
+        @media (max-width: 768px) { .profile-layout { flex-direction: column; } .profile-dashboard { flex: 1 1 auto; width: 100%; } .edit-panel { max-width: 100%; } .form-row { grid-template-columns: 1fr; } .form-row .form-group { margin-bottom: 12px; } .form-row .form-group:last-child { margin-bottom: 0; } .vehicle-types { grid-template-columns: repeat(2, 1fr); } }
       `}</style>
     </div>
   );
