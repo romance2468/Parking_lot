@@ -1,7 +1,8 @@
 import { Router, Request, Response } from 'express';
-import { verifyToken, extractTokenFromHeader } from '../config/auth';
-import * as parkingService from '../services/parkingService';
-import { CarService } from '../services/carService';
+import { AuthService } from '../services/auth/authService';
+import { verifyToken } from '../config/auth';
+import * as parkingService from '../services/parking/parkingService';
+import { CarService } from '../services/cars/carService';
 
 const router = Router();
 const carService = new CarService();
@@ -9,7 +10,7 @@ const carService = new CarService();
 const authenticateToken = (req: Request, res: Response, next: any) => {
   try {
     const authHeader = req.headers.authorization;
-    const token = extractTokenFromHeader(authHeader);
+    const token = AuthService.extractTokenFromHeader(authHeader);
     const payload = verifyToken(token);
     if (!req.body) req.body = {};
     req.body.userId = payload.userId;
@@ -75,12 +76,13 @@ router.post('/booking', authenticateToken, async (req: Request, res: Response) =
   }
 });
 
-// Сессии бронирования пользователя (по его машинам)
+// Сессии бронирования пользователя (по его машинам); перед ответом освобождаем места по истёкшим сессиям
 router.get('/booking', authenticateToken, (req: Request, res: Response) => {
   const userId = req.body?.userId as number | undefined;
   if (userId == null) return res.status(401).json({ error: 'Не авторизован' });
 
-  carService.getCarByUserId(userId)
+  parkingService.releaseExpiredSessions()
+    .then(() => carService.getCarByUserId(userId))
     .then((car) => {
       if (!car) return [];
       return parkingService.getBookingSessionsByCarId(car.id);

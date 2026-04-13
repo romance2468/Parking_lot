@@ -1,17 +1,21 @@
 # syntax=docker/dockerfile:1
-# Бэкенд API (Node.js)
+# Бэкенд API (Node.js).
+# Docker-контекст в compose: корень Parking_lot.
 FROM node:20-alpine
 
 WORKDIR /app
 
-COPY package*.json ./
-# Кэш npm между сборками — повторный build не тянет пакеты заново
+# Ставим зависимости для сборки/запуска бэкенда
+COPY backend-app/package*.json ./
 RUN --mount=type=cache,target=/root/.npm \
     npm ci --legacy-peer-deps
 
-COPY . .
-RUN npm run build:backend
+# Копируем исходники бэкенда (код из backend/)
+COPY backend/ ./backend/
+
+# Сборка TypeScript в backend/dist
+RUN npx tsc -p backend/tsconfig.json
 
 EXPOSE 3001
 
-CMD ["npm", "run", "start:backend"]
+CMD ["node", "backend/dist/app.js"]

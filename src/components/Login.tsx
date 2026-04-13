@@ -10,7 +10,7 @@ const Login: React.FC = () => {
   const [error, setError] = useState('');
   const [rememberMe, setRememberMe] = useState(false);
   const [loading, setLoading] = useState(false);
-  const [loginSuccess, setLoginSuccess] = useState<{ token: string; user?: unknown } | null>(null);
+  const [loginSuccess, setLoginSuccess] = useState<{ token: string; refreshToken: string; user?: unknown } | null>(null);
 
   // Create more visible bubbles
   const [bubbles, setBubbles] = useState<Array<{ id: number; size: number; left: number; duration: number; delay: number }>>([]);
@@ -49,15 +49,17 @@ const handleSubmit = async (e: React.FormEvent) => {
 
       const response = await authAPI.login(credentials);
       const token = response.data?.token;
+      const refreshToken = response.data?.refreshToken;
       const userData = response.data?.user;
 
-      if (!token) {
-        setError('Ошибка входа: не получен токен');
+      if (!token || !refreshToken) {
+        setError('Ошибка входа: не получены токены');
         setLoading(false);
         return;
       }
 
       localStorage.setItem('token', token);
+      localStorage.setItem('refreshToken', refreshToken);
       if (userData) {
         localStorage.setItem('user', JSON.stringify(userData));
       }
@@ -69,7 +71,7 @@ const handleSubmit = async (e: React.FormEvent) => {
       }
 
       setLoading(false);
-      setLoginSuccess({ token, user: userData });
+      setLoginSuccess({ token, refreshToken, user: userData });
     } catch (err: any) {
       setLoading(false);
       setError(err.response?.data?.error || 'Неверный email или пароль');
@@ -79,9 +81,9 @@ const handleSubmit = async (e: React.FormEvent) => {
   // Переход в профиль после успешного входа, передаём токен в state (чтобы Profile точно его получил)
   useEffect(() => {
     if (loginSuccess) {
-      const { token: t, user: u } = loginSuccess;
+      const { token: t, refreshToken: rt, user: u } = loginSuccess;
       setLoginSuccess(null);
-      navigate('/profile', { replace: true, state: { token: t, user: u } });
+      navigate('/profile', { replace: true, state: { token: t, refreshToken: rt, user: u } });
     }
   }, [loginSuccess, navigate]);
 
@@ -183,9 +185,7 @@ const handleSubmit = async (e: React.FormEvent) => {
             </button>
           </form>
 
-          <div className="temp-login-note">
-            ⚡ Временный вход: любые email и пароль
-          </div>
+         
 
           <div className="register-link">
             Нет аккаунта? <a href="#">Свяжитесь с администратором</a>

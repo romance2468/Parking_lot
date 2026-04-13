@@ -32,11 +32,10 @@ services:
       postgres:
         condition: service_healthy
 
-  # Фронтенд: React build, отдаётся из образа nginx
   frontend:
     build:
-      context: .
-      dockerfile: Dockerfile.frontend
+      context: ./frontend
+      dockerfile: ../Dockerfile.frontend
     image: parking-lot-frontend:nginx
     ports:
       - "80:80"

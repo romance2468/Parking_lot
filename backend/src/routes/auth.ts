@@ -1,6 +1,6 @@
 import { Router, Request, Response } from 'express';
-import { AuthService } from '../services/authService';
-import { verifyToken, extractTokenFromHeader } from '../config/auth';
+import { AuthService } from '../services/auth/authService';
+import { verifyToken } from '../config/auth';
 
 const router = Router();
 const authService = new AuthService();
@@ -13,8 +13,9 @@ router.post('/register', async (req: Request, res: Response) => {
       return res.status(400).json({ error: 'Пожалуйста, заполните все поля' });
     }
 
-    const { user, token } = await authService.register(name, email, password);
-    
+    const { user, token, refreshToken } = await authService.register(name, email, password);
+    console.log('[auth] Регистрация:', user.user_email);
+
     res.status(201).json({
       message: 'Регистрация успешна',
       user: {
@@ -22,7 +23,8 @@ router.post('/register', async (req: Request, res: Response) => {
         name: user.user_name,
         email: user.user_email
       },
-      token
+      token,
+      refreshToken
     });
   } catch (error: any) {
     res.status(400).json({ error: error.message });
@@ -37,8 +39,9 @@ router.post('/login', async (req: Request, res: Response) => {
       return res.status(400).json({ error: 'Пожалуйста, заполните все поля' });
     }
 
-    const { user, token } = await authService.login(email, password);
-    
+    const { user, token, refreshToken } = await authService.login(email, password);
+    console.log('[auth] Вход:', user.user_email);
+
     res.json({
       message: 'Авторизация успешна',
       user: {
@@ -46,17 +49,43 @@ router.post('/login', async (req: Request, res: Response) => {
         name: user.user_name,
         email: user.user_email
       },
-      token
+      token,
+      refreshToken
     });
   } catch (error: any) {
     res.status(400).json({ error: error.message });
   }
 });
 
+router.post('/refresh', async (req: Request, res: Response) => {
+  try {
+    const { refreshToken } = req.body;
+    if (!refreshToken) {
+      return res.status(400).json({ error: 'Передайте refreshToken в теле запроса' });
+    }
+    const { token, refreshToken: newRefresh } = await authService.refreshAccessToken(refreshToken);
+    res.json({ token, refreshToken: newRefresh });
+  } catch (error: any) {
+    res.status(401).json({ error: error.message || 'Не удалось обновить сессию' });
+  }
+});
+
+router.post('/logout', async (req: Request, res: Response) => {
+  try {
+    const authHeader = req.headers.authorization;
+    const token = AuthService.extractTokenFromHeader(authHeader);
+    const payload = verifyToken(token);
+    await authService.revokeRefreshTokensForUser(payload.userId);
+    res.json({ message: 'Выход выполнен' });
+  } catch (error: any) {
+    res.status(401).json({ error: error.message });
+  }
+});
+
 router.get('/me', async (req: Request, res: Response) => {
   try {
     const authHeader = req.headers.authorization;
-    const token = extractTokenFromHeader(authHeader);
+    const token = AuthService.extractTokenFromHeader(authHeader);
     const payload = verifyToken(token);
     
     const user = await authService.getUserById(payload.userId);
@@ -79,7 +108,7 @@ router.get('/me', async (req: Request, res: Response) => {
 router.put('/me', async (req: Request, res: Response) => {
   try {
     const authHeader = req.headers.authorization;
-    const token = extractTokenFromHeader(authHeader);
+    const token = AuthService.extractTokenFromHeader(authHeader);
     const payload = verifyToken(token);
     const { name } = req.body;
 
@@ -107,7 +136,7 @@ router.put('/me', async (req: Request, res: Response) => {
 router.put('/me/password', async (req: Request, res: Response) => {
   try {
     const authHeader = req.headers.authorization;
-    const token = extractTokenFromHeader(authHeader);
+    const token = AuthService.extractTokenFromHeader(authHeader);
     const payload = verifyToken(token);
     const { currentPassword, newPassword } = req.body;
 

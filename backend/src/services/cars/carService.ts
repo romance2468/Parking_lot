@@ -1,4 +1,4 @@
-import { dbManager } from '../config/database';
+import { dbManager } from '../../config/database';
 
 export interface Car {
   id: number;

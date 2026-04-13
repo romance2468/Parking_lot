@@ -1,47 +1,188 @@
-# Getting Started with Create React App
+# Parking Lot — Менеджеры состояния
 
-This project was bootstrapped with [Create React App](https://github.com/facebook/create-react-app).
+Два фронтенд-приложения на одном бэкенде, демонстрирующие два подхода к управлению состоянием.
 
-## Available Scripts
+## Структура проекта
 
-In the project directory, you can run:
+```
+Parking_lot/
+├── backend/          # Node.js + Express + PostgreSQL
+├── redux-app/        # React + Redux Toolkit + RTK Query
+├── mobx-app/         # React + MobX + mobx-react-lite
+└── docker-compose.yml
+```
 
-### `npm start`
+---
 
-Runs the app in the development mode.\
-Open [http://localhost:3000](http://localhost:3000) to view it in the browser.
+## Установка и запуск
 
-The page will reload if you make edits.\
-You will also see any lint errors in the console.
+### 1. Запуск бэкенда
 
-### `npm test`
+```bash
+docker-compose up -d postgres backend
+```
 
-Launches the test runner in the interactive watch mode.\
-See the section about [running tests](https://facebook.github.io/create-react-app/docs/running-tests) for more information.
+### 2. Redux-приложение
 
-### `npm run build`
+```bash
+cd redux-app
+npm install
+npm start
+# → http://localhost:3000
+```
 
-Builds the app for production to the `build` folder.\
-It correctly bundles React in production mode and optimizes the build for the best performance.
+### 3. MobX-приложение
 
-The build is minified and the filenames include the hashes.\
-Your app is ready to be deployed!
+```bash
+cd mobx-app
+npm install
+npm start
+# → http://localhost:3001 (или другой порт)
+```
 
-See the section about [deployment](https://facebook.github.io/create-react-app/docs/deployment) for more information.
+---
 
-### `npm run eject`
+## Приложение 1: Redux RTK (`redux-app/`)
 
-**Note: this is a one-way operation. Once you `eject`, you can’t go back!**
+### Зависимости
+- `@reduxjs/toolkit` — Redux + RTK Query
+- `react-redux` — интеграция с React
 
-If you aren’t satisfied with the build tool and configuration choices, you can `eject` at any time. This command will remove the single build dependency from your project.
+### Структура
 
-Instead, it will copy all the configuration files and the transitive dependencies (webpack, Babel, ESLint, etc) right into your project so you have full control over them. All of the commands except `eject` will still work, but they will point to the copied scripts so you can tweak them. At this point you’re on your own.
+```
+redux-app/src/
+├── api/
+│   └── baseApi.ts          ← createApi() с кэшированием
+├── store/
+│   ├── index.ts            ← configureStore
+│   └── authSlice.ts        ← токены и user
+├── services/
+│   ├── authApi.ts          ← login, getProfile, updateProfile
+│   ├── carsApi.ts          ← getCars, addCar, deleteCar
+│   ├── parkingApi.ts       ← getPlaces, getSessions, bookParking
+│   └── profileApi.ts       ← getFullProfile
+└── components/
+    ├── Header.tsx           ← user.name из authSlice
+    ├── Login.tsx            ← useLoginMutation
+    ├── Profile.tsx          ← 4 запроса, UserInfo внутри
+    └── UserInfo.tsx         ← использует 3 кэша RTK Query
+```
 
-You don’t have to ever use `eject`. The curated feature set is suitable for small and middle deployments, and you shouldn’t feel obligated to use this feature. However we understand that this tool wouldn’t be useful if you couldn’t customize it when you are ready for it.
+### Как работает кэш RTK Query
 
-## Learn More
+```
+Компонент A: useGetProfileQuery()  ─┐
+                                     ├─→ ОДИН HTTP запрос GET /api/auth/profile
+Компонент B: useGetProfileQuery()  ─┤   Результат → store['api']['queries']['getProfile']
+                                     │
+Компонент C: useGetProfileQuery()  ─┘   Все читают из кэша (0 HTTP!)
 
-You can learn more in the [Create React App documentation](https://facebook.github.io/create-react-app/docs/getting-started).
+После PUT /api/auth/profile:
+  invalidatesTags: ['User']  ─→  кэш сброшен  ─→  один новый запрос
+```
 
-To learn React, check out the [React documentation](https://reactjs.org/).
-# Parking_lot
+**Параметры кэша в `baseApi.ts`:**
+| Параметр | Значение | Описание |
+|----------|----------|----------|
+| `keepUnusedDataFor` | 300 сек | Хранить данные 5 мин после размонтирования |
+| `refetchOnMountOrArgChange` | 60 сек | Перезапрашивать если данным > 1 мин |
+| `refetchOnFocus` | true | Обновлять при возврате на вкладку |
+| `refetchOnReconnect` | true | Обновлять при восстановлении сети |
+
+---
+
+## Приложение 2: MobX (`mobx-app/`)
+
+### Зависимости
+- `mobx` — реактивный стейт
+- `mobx-react-lite` — интеграция с React (`observer`)
+
+### Структура
+
+```
+mobx-app/src/
+├── api/
+│   └── axiosInstance.ts    ← axios + JWT интерцептор
+├── stores/
+│   ├── RootStore.ts        ← объединяет все сторы
+│   ├── AuthStore.ts        ← user, token, TTL-кэш 5 мин
+│   ├── CarsStore.ts        ← cars[], TTL-кэш 3 мин
+│   └── ParkingStore.ts     ← places[], sessions[], TTL-кэш 1-2 мин
+├── context/
+│   └── StoreContext.tsx    ← React Context + useStore() хук
+└── components/
+    ├── Header.tsx           ← observer: authStore.user.name
+    ├── Login.tsx            ← observer: authStore.loading/error
+    ├── Profile.tsx          ← observer: все три стора
+    └── UserInfo.tsx         ← observer: user + carsCount + activeSessions
+```
+
+### Как работает TTL-кэш MobX
+
+```typescript
+// В каждом сторе:
+private _lastFetched: number | null = null;
+private _cacheTTL = 5 * 60 * 1000; // 5 минут
+
+get isCacheValid() {
+  return this._lastFetched !== null
+    && (Date.now() - this._lastFetched) < this._cacheTTL;
+}
+
+async fetchProfile(force = false) {
+  if (!force && this.isCacheValid && this.user) return; // ← кэш HIT
+  // ... HTTP запрос
+  this._lastFetched = Date.now(); // ← обновляем метку
+}
+```
+
+### Как работает реактивность MobX
+
+```
+authStore.login() → runInAction → this.user = { id: 1, name: 'Иван', ... }
+                                          ↓
+                           MobX Proxy фиксирует изменение
+                                          ↓
+          ┌───────────────┬──────────────┬───────────────┐
+          ↓               ↓              ↓               ↓
+      Header.tsx     Profile.tsx    UserInfo.tsx    Sidebar.tsx
+   (читает user.name) (читает user)  (читает user)  (читает user.email)
+   
+   ВСЕ перерисуются — автоматически, точечно, без лишних рендеров
+```
+
+---
+
+## Данные в нескольких частях приложения
+
+### `User` — используется в 4 компонентах
+
+| Компонент | Что отображает | Redux | MobX |
+|-----------|---------------|-------|------|
+| `Header` | Имя в навигации | `useAppSelector(selectCurrentUser)` | `authStore.user.name` |
+| `Profile` | Имя + email + ID | `useGetProfileQuery()` | `authStore.user` |
+| `UserInfo` | Карточка пользователя | `useGetProfileQuery()` | `authStore.user` |
+| `Login` | Редирект после входа | `selectIsAuthenticated` | `authStore.isAuthenticated` |
+
+### Количество HTTP-запросов
+
+| Ситуация | Redux RTK | MobX |
+|----------|-----------|------|
+| 4 компонента читают User | **1 запрос** (кэш) | **1 запрос** (если свежий TTL) |
+| После logout → login | 1 (инвалидация тэгов) | 1 (invalidateCache) |
+| Возврат на вкладку | 1 (refetchOnFocus) | 0 (TTL не истёк) |
+
+---
+
+## Сравнение подходов
+
+| | Redux RTK | MobX |
+|-|-----------|------|
+| **Кэш** | Автомат через `providesTags` | Ручной TTL |
+| **Инвалидация** | `invalidatesTags` | `invalidateCache()` |
+| **Реактивность** | `useSelector` hook | `observer()` wrapper |
+| **Boilerplate** | Больше (slice + api) | Меньше (класс + makeAutoObservable) |
+| **Отладка** | Redux DevTools | MobX DevTools |
+| **TypeScript** | Отличная поддержка | Отличная поддержка |
+| **Подход** | Функциональный, иммутабельный | ООП, мутабельный |

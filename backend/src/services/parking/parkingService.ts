@@ -1,4 +1,4 @@
-import { dbManager } from '../config/database';
+import { dbManager } from '../../config/database';
 
 export type TypeParking = 'standard' | 'electric' | 'handicap' | 'Электрозарядка' | 'для инвалидов' | 'стандартная';
 
@@ -48,7 +48,21 @@ function rowToSession(row: any): BookingSession {
   };
 }
 
+/** Освобождает места по сессиям, у которых time_end уже прошло (помечает сессию завершённой и ставит место свободным). */
+export async function releaseExpiredSessions(): Promise<void> {
+  const pool = dbManager.getPool();
+  const result = await pool.query(
+    `SELECT id_session, id_parking FROM booking_sessions
+     WHERE is_done_session = false AND time_end < NOW()`
+  );
+  for (const row of result.rows || []) {
+    await pool.query('UPDATE booking_sessions SET is_done_session = true WHERE id_session = $1', [row.id_session]);
+    await setPlaceFree(row.id_parking, true);
+  }
+}
+
 export async function getPlaces(floor?: number): Promise<ParkingPlace[]> {
+  await releaseExpiredSessions();
   const pool = dbManager.getPool();
   const result = floor != null
     ? await pool.query('SELECT * FROM parking_places WHERE floor = $1 ORDER BY section, place_num', [floor])
@@ -57,6 +71,7 @@ export async function getPlaces(floor?: number): Promise<ParkingPlace[]> {
 }
 
 export async function getPlaceById(idParking: number): Promise<ParkingPlace | null> {
+  await releaseExpiredSessions();
   const pool = dbManager.getPool();
   const result = await pool.query('SELECT * FROM parking_places WHERE id_parking = $1', [idParking]);
   const row = result.rows[0];
@@ -77,6 +92,7 @@ export async function createBookingSession(
   timeEnd: string,
   price: number
 ): Promise<BookingSession> {
+  await releaseExpiredSessions();
   const pool = dbManager.getPool();
   const result = await pool.query(
     `INSERT INTO booking_sessions (car_id, id_parking, type_parking, time_start, time_end, price, is_done_session)

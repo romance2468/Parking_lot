@@ -61,17 +61,18 @@ const handleSubmit = async (e: React.FormEvent) => {
       };
       
       const response = await authAPI.register(credentials);
-      const { token, user } = response.data;
-      if (!token || !user?.id) {
+      const { token, refreshToken, user } = response.data;
+      if (!token || !refreshToken || !user?.id) {
         setError('Ошибка: не получены данные пользователя');
         setLoading(false);
         return;
       }
       localStorage.setItem('token', token);
+      localStorage.setItem('refreshToken', refreshToken);
       localStorage.setItem('user', JSON.stringify(user));
       setLoading(false);
       setSuccess(true);
-      navigate('/car-details', { state: { fromRegister: true, token, userId: user.id } });
+      navigate('/car-details', { state: { fromRegister: true, token, refreshToken, userId: user.id } });
     } catch (err: any) {
       setLoading(false);
       setError(err.response?.data?.error || 'Ошибка регистрации');

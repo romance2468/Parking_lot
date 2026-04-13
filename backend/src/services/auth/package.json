@@ -1,0 +1,12 @@
+{
+  "name": "parking-auth-service",
+  "version": "1.0.0",
+  "private": true,
+  "main": "authService.js",
+  "dependencies": {
+    "bcryptjs": "^3.0.3"
+  },
+  "devDependencies": {
+    "@types/bcryptjs": "^3.0.0"
+  }
+}

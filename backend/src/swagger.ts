@@ -50,8 +50,8 @@ export const openApiDocument = {
         required: ['id', 'name', 'email'],
         properties: {
           id: { type: 'integer', example: 1 },
-          name: { type: 'string', example: 'Иван Петров' },
-          email: { type: 'string', format: 'email', example: 'ivan@example.com' },
+          name: { type: 'string', example: 'Петров' },
+          email: { type: 'string', format: 'email', example: 'petrov@example.com' },
         },
       },
       Car: {
@@ -188,7 +188,8 @@ export const openApiDocument = {
                   properties: {
                     message: { type: 'string', example: 'Регистрация успешна' },
                     user: { $ref: '#/components/schemas/User' },
-                    token: { type: 'string', description: 'JWT токен', example: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...' },
+                    token: { type: 'string', description: 'JWT access token', example: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...' },
+                    refreshToken: { type: 'string', description: 'Refresh token (хранится в БД по SHA-256)' },
                   },
                 },
               },
@@ -234,7 +235,8 @@ export const openApiDocument = {
                   properties: {
                     message: { type: 'string', example: 'Вход выполнен успешно' },
                     user: { $ref: '#/components/schemas/User' },
-                    token: { type: 'string', example: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...' },
+                    token: { type: 'string', description: 'JWT access token', example: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...' },
+                    refreshToken: { type: 'string', description: 'Refresh token' },
                   },
                 },
               },
@@ -247,6 +249,76 @@ export const openApiDocument = {
           '401': { 
             description: 'Неверный email или пароль', 
             content: { 'application/json': { schema: { $ref: '#/components/schemas/Error' } } } 
+          },
+        },
+      },
+    },
+    '/auth/refresh': {
+      post: {
+        summary: 'Обновить access token по refresh token',
+        tags: ['Auth'],
+        description: 'Передаётся действующий refresh token; при успехе выдаются новые access и refresh (ротация).',
+        requestBody: {
+          required: true,
+          content: {
+            'application/json': {
+              schema: {
+                type: 'object',
+                required: ['refreshToken'],
+                properties: {
+                  refreshToken: { type: 'string', description: 'Refresh token, полученный при входе/регистрации' },
+                },
+              },
+            },
+          },
+        },
+        responses: {
+          '200': {
+            description: 'Новая пара токенов',
+            content: {
+              'application/json': {
+                schema: {
+                  type: 'object',
+                  properties: {
+                    token: { type: 'string', description: 'Новый JWT access token' },
+                    refreshToken: { type: 'string', description: 'Новый refresh token' },
+                  },
+                },
+              },
+            },
+          },
+          '400': {
+            description: 'Нет refreshToken в теле',
+            content: { 'application/json': { schema: { $ref: '#/components/schemas/Error' } } },
+          },
+          '401': {
+            description: 'Недействительный или истёкший refresh token',
+            content: { 'application/json': { schema: { $ref: '#/components/schemas/Error' } } },
+          },
+        },
+      },
+    },
+    '/auth/logout': {
+      post: {
+        summary: 'Выход (отозвать refresh-сессии на сервере)',
+        tags: ['Auth'],
+        security: [{ bearerAuth: [] }],
+        description: 'Удаляет все refresh-токены пользователя. Клиенту всё равно нужно очистить localStorage.',
+        responses: {
+          '200': {
+            description: 'Успешно',
+            content: {
+              'application/json': {
+                schema: {
+                  type: 'object',
+                  properties: { message: { type: 'string', example: 'Выход выполнен' } },
+                },
+              },
+            },
+          },
+          '401': {
+            description: 'Нет или неверный access token',
+            content: { 'application/json': { schema: { $ref: '#/components/schemas/Error' } } },
           },
         },
       },

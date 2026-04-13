@@ -1,13 +1,14 @@
 import { Router, Request, Response } from 'express';
-import { verifyToken, extractTokenFromHeader } from '../config/auth';
-import { getProfileData } from '../services/profileService';
+import { AuthService } from '../services/auth/authService';
+import { verifyToken } from '../config/auth';
+import { getProfileData } from '../services/profile/profileService';
 
 const router = Router();
 
 const authenticateToken = (req: Request, res: Response, next: any) => {
   try {
     const authHeader = req.headers.authorization;
-    const token = extractTokenFromHeader(authHeader);
+    const token = AuthService.extractTokenFromHeader(authHeader);
     const payload = verifyToken(token);
     if (!req.body) req.body = {};
     req.body.userId = payload.userId;

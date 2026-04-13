@@ -1,6 +1,7 @@
 import { Router, Request, Response } from 'express';
-import { CarService, VehicleType } from '../services/carService';
-import { verifyToken, extractTokenFromHeader } from '../config/auth';
+import { CarService, VehicleType } from '../services/cars/carService';
+import { AuthService } from '../services/auth/authService';
+import { verifyToken } from '../config/auth';
 
 const router = Router();
 const carService = new CarService();
@@ -9,7 +10,7 @@ const carService = new CarService();
 const authenticateToken = (req: Request, res: Response, next: any) => {
   try {
     const authHeader = req.headers.authorization;
-    const token = extractTokenFromHeader(authHeader);
+    const token = AuthService.extractTokenFromHeader(authHeader);
     const payload = verifyToken(token);
     if (!req.body) req.body = {};
     req.body.userId = payload.userId;

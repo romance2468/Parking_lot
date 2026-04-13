@@ -5,7 +5,7 @@ import { carAPI } from '../api';
 const CarDetails: React.FC = () => {
   const navigate = useNavigate();
   const location = useLocation();
-  const state = location.state as { fromRegister?: boolean; token?: string; userId?: number } | undefined;
+  const state = location.state as { fromRegister?: boolean; token?: string; refreshToken?: string; userId?: number } | undefined;
   
   // Form state
   const [licensePlate, setLicensePlate] = useState('');
@@ -24,7 +24,10 @@ const CarDetails: React.FC = () => {
     if (state?.token) {
       localStorage.setItem('token', state.token);
     }
-  }, [state?.token]);
+    if (state?.refreshToken) {
+      localStorage.setItem('refreshToken', state.refreshToken);
+    }
+  }, [state?.token, state?.refreshToken]);
 
   useEffect(() => {
     const newBubbles = [];

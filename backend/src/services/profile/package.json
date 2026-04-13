@@ -1,0 +1,6 @@
+{
+  "name": "parking-profile-service",
+  "version": "1.0.0",
+  "private": true,
+  "main": "profileService.js"
+}

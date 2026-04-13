@@ -1,6 +1,6 @@
-import { AuthService } from './authService';
-import { CarService } from './carService';
-import { Car } from './carService';
+import { AuthService } from '../auth/authService';
+import { CarService } from '../cars/carService';
+import { Car } from '../cars/carService';
 
 export interface ProfileUser {
   id: number;
@@ -42,8 +42,6 @@ function normalizeCar(row: Car): ProfileCar {
 
 /**
  * Загружает данные профиля: пользователь и автомобиль (cars.user_id = userId).
- * Гарантирует загрузку обоих: пользователь обязателен, автомобиль — если есть в БД.
- * Возвращает структуру с проверенными полями (id, name, email у user; у car — все поля).
  */
 export async function getProfileData(userId: number): Promise<ProfileData> {
   const user = await authService.getUserById(userId);

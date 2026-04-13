@@ -1,63 +1,13 @@
 {
-  "name": "parking-lot",
+  "name": "parking-lot-root",
   "version": "1.0.0",
   "private": true,
   "scripts": {
-    "start": "react-scripts start",
-    "build": "react-scripts build",
-    "test": "react-scripts test",
-    "eject": "react-scripts eject",
-    "dev:backend": "ts-node-dev --respawn --transpile-only --project backend/tsconfig.json backend/src/app.ts",
-    "build:backend": "tsc -p backend/tsconfig.json",
-    "start:backend": "node backend/dist/app.js",
-    "build:nginx": "npm run build && docker build -f Dockerfile.frontend -t parking-frontend .",
-    "serve:nginx": "npm run build && nginx -p . -c nginx/nginx-local.conf",
     "docker:up": "docker compose up --build",
-    "docker:down": "docker compose down"
+    "docker:down": "docker compose down",
+    "dev:frontend": "cd frontend && npm start",
+    "dev:backend": "cd backend-app && npm run build && npm run start",
+    "install:all": "cd frontend && npm install && cd ../backend-app && npm install"
   },
-  "dependencies": {
-    "@emotion/react": "^11.14.0",
-    "@emotion/styled": "^11.14.1",
-    "@mui/icons-material": "^7.3.8",
-    "@mui/material": "^7.3.8",
-    "@testing-library/dom": "^10.4.1",
-    "@testing-library/jest-dom": "^6.9.1",
-    "@testing-library/react": "^16.3.2",
-    "@testing-library/user-event": "^13.5.0",
-    "axios": "^1.13.5",
-    "bcryptjs": "^3.0.3",
-    "cors": "^2.8.6",
-    "dotenv": "^17.3.1",
-    "express": "^5.2.1",
-    "jsonwebtoken": "^9.0.3",
-    "react": "^19.2.4",
-    "react-dom": "^19.2.4",
-    "react-router-dom": "^7.13.1",
-    "react-scripts": "5.0.1",
-    "pg": "^8.13.1",
-    "swagger-ui-express": "^5.0.1",
-    "web-vitals": "^2.1.4"
-  },
-  "devDependencies": {
-    "@types/swagger-ui-express": "^4.1.6",
-    "@types/bcryptjs": "^3.0.0",
-    "@types/cors": "^2.8.19",
-    "@types/express": "^5.0.6",
-    "@types/jest": "^27.5.2",
-    "@types/jsonwebtoken": "^9.0.10",
-    "@types/node": "^25.3.2",
-    "@types/pg": "^8.11.10",
-    "@types/react": "^19.2.14",
-    "@types/react-dom": "^19.2.3",
-    "@types/react-router-dom": "^5.3.3",
-    "ts-node": "^10.9.2",
-    "typescript": "^5.9.3"
-  },
-  "eslintConfig": {
-    "extends": ["react-app", "react-app/jest"]
-  },
-  "browserslist": {
-    "production": [">0.2%", "not dead", "not op_mini all"],
-    "development": ["last 1 chrome version", "last 1 firefox version", "last 1 safari version"]
-  }
+  "description": "Корень проекта: скрипты для Docker и локальной разработки. Сервисы: frontend/, backend/."
 }
