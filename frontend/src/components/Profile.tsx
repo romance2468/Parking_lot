@@ -1,7 +1,38 @@
-import React, { useState, useEffect } from 'react';
+import React, { useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { authAPI, carAPI, parkingAPI } from '../api';
 import { User, Car, BookingSession } from '../types';
+import {
+  useGetProfileQuery,
+  useGetMyBookingsQuery,
+  useUpdateProfileMutation,
+  useUpdatePasswordMutation,
+  useCreateCarMutation,
+  useUpdateCarMutation,
+} from '../store/parkingApi';
+import { useAppDispatch, useAppSelector } from '../store/hooks';
+import {
+  setProfileBubbles,
+  setProfileError,
+  setProfileSuccess,
+  setName,
+  setAutoNumber,
+  setMark,
+  setColor,
+  setSelectedVehicleType,
+  setNotes,
+  setSavingProfile,
+  setSavingCar,
+  setEditProfile,
+  setEditCar,
+  setEditPassword,
+  setCurrentPassword,
+  setNewPassword,
+  setConfirmPassword,
+  setSavingPassword,
+  hydrateFormFromProfile,
+  clearMessages,
+} from '../store/slices/profileSlice';
+import { generateBubbles } from '../store/bubbles';
 
 const vehicleTypeLabels: Record<string, string> = {
   sedan: 'Седан',
@@ -13,30 +44,67 @@ const vehicleTypeLabels: Record<string, string> = {
 const Profile: React.FC = () => {
   const navigate = useNavigate();
   const location = useLocation();
-  const [user, setUser] = useState<User | null>(null);
-  const [car, setCar] = useState<Car | null>(null);
-  const [loadingUser, setLoadingUser] = useState(true);
-  const [error, setError] = useState('');
-  const [name, setName] = useState('');
-  const [email, setEmail] = useState('');
-  const [autoNumber, setAutoNumber] = useState('');
-  const [mark, setMark] = useState('');
-  const [color, setColor] = useState('');
-  const [selectedVehicleType, setSelectedVehicleType] = useState('sedan');
-  const [notes, setNotes] = useState('');
-  const [success, setSuccess] = useState('');
-  const [savingProfile, setSavingProfile] = useState(false);
-  const [savingCar, setSavingCar] = useState(false);
-  const [editProfile, setEditProfile] = useState(false);
-  const [editCar, setEditCar] = useState(false);
-  const [editPassword, setEditPassword] = useState(false);
-  const [currentPassword, setCurrentPassword] = useState('');
-  const [newPassword, setNewPassword] = useState('');
-  const [confirmPassword, setConfirmPassword] = useState('');
-  const [savingPassword, setSavingPassword] = useState(false);
-  const [sessions, setSessions] = useState<BookingSession[]>([]);
+  const dispatch = useAppDispatch();
+  const {
+    bubbles,
+    error,
+    success,
+    name,
+    email,
+    autoNumber,
+    mark,
+    color,
+    selectedVehicleType,
+    notes,
+    savingProfile,
+    savingCar,
+    editProfile,
+    editCar,
+    editPassword,
+    currentPassword,
+    newPassword,
+    confirmPassword,
+    savingPassword,
+  } = useAppSelector((s) => s.profile);
 
-  const [bubbles, setBubbles] = useState<Array<{ id: number; size: number; left: number; duration: number; delay: number }>>([]);
+  const [updateProfile] = useUpdateProfileMutation();
+  const [updatePassword] = useUpdatePasswordMutation();
+  const [createCar] = useCreateCarMutation();
+  const [updateCar] = useUpdateCarMutation();
+
+  const token = localStorage.getItem('token');
+  const {
+    data: profileData,
+    isLoading: loadingUser,
+    error: profileQueryError,
+  } = useGetProfileQuery(undefined, { skip: !token });
+  const { data: bookingsData } = useGetMyBookingsQuery(undefined, { skip: !token });
+
+  const user: User | null = profileData?.user
+    ? {
+        id: profileData.user.id,
+        name: profileData.user.name,
+        email: profileData.user.email,
+        role: 'user',
+      }
+    : null;
+
+  const rawCar = profileData?.car as Record<string, unknown> | null | undefined;
+  const car: Car | null =
+    rawCar && (rawCar.id != null || rawCar.auto_number != null)
+      ? {
+          id: Number(rawCar.id),
+          user_id: Number(rawCar.user_id ?? rawCar.userId ?? 0),
+          type: String(rawCar.type ?? 'sedan'),
+          mark: String(rawCar.mark ?? ''),
+          auto_number: String(rawCar.auto_number ?? rawCar.autoNumber ?? ''),
+          color: String(rawCar.color ?? ''),
+          notes: String(rawCar.notes ?? ''),
+          created_at: String(rawCar.created_at ?? rawCar.createdAt ?? ''),
+        }
+      : null;
+
+  const sessions: BookingSession[] = bookingsData?.sessions ?? [];
 
   const vehicleTypes = [
     { id: 'sedan', label: 'Седан', icon: '🚗' },
@@ -46,20 +114,9 @@ const Profile: React.FC = () => {
   ];
 
   useEffect(() => {
-    const newBubbles = [];
-    for (let i = 0; i < 40; i++) {
-      newBubbles.push({
-        id: i,
-        size: Math.random() * 50 + 25,
-        left: Math.random() * 100,
-        duration: Math.random() * 25 + 20,
-        delay: Math.random() * 8
-      });
-    }
-    setBubbles(newBubbles);
-  }, []);
+    dispatch(setProfileBubbles(generateBubbles()));
+  }, [dispatch]);
 
-  // Повторная загрузка данных при каждом монтировании; токен берём из state (после логина) или из localStorage
   useEffect(() => {
     const state = location.state as { token?: string; refreshToken?: string; user?: unknown } | undefined;
     if (state?.token) {
@@ -73,190 +130,145 @@ const Profile: React.FC = () => {
         localStorage.setItem('user', JSON.stringify(state.user));
       } catch (_) {}
     }
-    const token = localStorage.getItem('token');
-    if (!token) {
+    const t = localStorage.getItem('token');
+    if (!t) {
       navigate('/login');
-      return;
     }
-    let cancelled = false;
-    setLoadingUser(true);
-    setError('');
-    authAPI.getProfile()
-      .then((res) => {
-        if (cancelled) return;
-        const d = res?.data;
-        if (!d?.user) {
-          setError('Некорректный ответ сервера');
-          return;
-        }
-        const u: User = { id: d.user.id, name: d.user.name, email: d.user.email, role: 'user' };
-        setUser(u);
-        setName(u.name);
-        setEmail(u.email);
-        const rawCar = d.car as Record<string, unknown> | null | undefined;
-        const c: Car | null = rawCar && (rawCar.id != null || rawCar.auto_number != null)
-          ? {
-              id: Number(rawCar.id),
-              user_id: Number(rawCar.user_id ?? rawCar.userId ?? 0),
-              type: String(rawCar.type ?? 'sedan'),
-              mark: String(rawCar.mark ?? ''),
-              auto_number: String(rawCar.auto_number ?? rawCar.autoNumber ?? ''),
-              color: String(rawCar.color ?? ''),
-              notes: String(rawCar.notes ?? ''),
-              created_at: String(rawCar.created_at ?? rawCar.createdAt ?? ''),
-            }
-          : null;
-        setCar(c);
-        if (c) {
-          setAutoNumber(c.auto_number || '');
-          setMark(c.mark || '');
-          setColor(c.color || '');
-          setSelectedVehicleType(c.type || 'sedan');
-          setNotes(c.notes || '');
-        }
-        parkingAPI.getMyBookings()
-          .then((bookingsRes) => {
-            if (!cancelled && bookingsRes?.data) setSessions(bookingsRes.data.sessions ?? []);
-          })
-          .catch(() => {
-            if (!cancelled) setSessions([]);
-          });
-      })
-      .catch((err: any) => {
-        if (cancelled) return;
-        if (err.response?.status === 401) {
-          navigate('/login');
-          return;
-        }
-        setError(err.response?.data?.error || err.message || 'Ошибка загрузки профиля');
-      })
-      .finally(() => {
-        if (!cancelled) setLoadingUser(false);
-      });
-    return () => { cancelled = true; };
   }, [navigate, location.state]);
 
   useEffect(() => {
-    if (user) {
-      setName(user.name);
-      setEmail(user.email);
-    }
-  }, [user]);
+    if (!profileData?.user) return;
+    const u = profileData.user;
+    const c = profileData.car;
+    dispatch(
+      hydrateFormFromProfile({
+        name: u.name,
+        email: u.email,
+        autoNumber: c?.auto_number || '',
+        mark: c?.mark || '',
+        color: c?.color || '',
+        selectedVehicleType: c?.type || 'sedan',
+        notes: c?.notes || '',
+      })
+    );
+  }, [profileData, dispatch]);
 
   useEffect(() => {
-    if (car) {
-      setAutoNumber(car.auto_number || '');
-      setMark(car.mark || '');
-      setColor(car.color || '');
-      setSelectedVehicleType(car.type || 'sedan');
-      setNotes(car.notes || '');
+    if (profileData?.user) {
+      dispatch(setProfileError(''));
+      return;
     }
-  }, [car]);
+    const err = profileQueryError as { status?: number | string; data?: { error?: string } } | undefined;
+    if (err?.status === 401) {
+      navigate('/login');
+      return;
+    }
+    if (err?.data?.error) {
+      dispatch(setProfileError(String(err.data.error)));
+    }
+  }, [profileQueryError, profileData, navigate, dispatch]);
 
   const handleSaveProfile = async (e: React.FormEvent) => {
     e.preventDefault();
-    setError('');
-    setSuccess('');
-    setSavingProfile(true);
+    dispatch(clearMessages());
+    dispatch(setSavingProfile(true));
     try {
-      await authAPI.updateProfile({ name: name.trim() });
-      setUser(prev => prev ? { ...prev, name: name.trim() } : null);
-      localStorage.setItem('user', JSON.stringify({ ...user, name: name.trim() }));
-      setSuccess('Данные профиля сохранены');
-      setEditProfile(false);
+      await updateProfile({ name: name.trim() }).unwrap();
+      if (user) {
+        localStorage.setItem('user', JSON.stringify({ ...user, name: name.trim() }));
+      }
+      dispatch(setProfileSuccess('Данные профиля сохранены'));
+      dispatch(setEditProfile(false));
     } catch (err: any) {
-      setError(err.response?.data?.error || 'Ошибка сохранения');
+      const msg = err?.data?.error ?? err?.error ?? 'Ошибка сохранения';
+      dispatch(setProfileError(typeof msg === 'string' ? msg : 'Ошибка сохранения'));
     }
-    setSavingProfile(false);
+    dispatch(setSavingProfile(false));
   };
 
   const handleCancelProfile = () => {
-    if (user) setName(user.name);
-    setEditProfile(false);
+    if (user) dispatch(setName(user.name));
+    dispatch(setEditProfile(false));
   };
 
   const handleSaveCar = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!autoNumber.trim()) {
-      setError('Введите номер автомобиля');
+      dispatch(setProfileError('Введите номер автомобиля'));
       return;
     }
-    setError('');
-    setSuccess('');
-    setSavingCar(true);
+    dispatch(clearMessages());
+    dispatch(setSavingCar(true));
     try {
       const carData = {
         autoNumber: autoNumber.trim(),
         type: selectedVehicleType,
         mark: mark.trim(),
         color: color.trim(),
-        notes: notes.trim()
+        notes: notes.trim(),
       };
       if (car) {
-        await carAPI.updateCar(car.id, carData);
+        await updateCar({ carId: car.id, body: carData }).unwrap();
       } else {
-        await carAPI.createCar(carData);
+        await createCar(carData).unwrap();
       }
-      setSuccess('Данные автомобиля сохранены');
-      const carRes = await carAPI.getCar();
-      if (carRes.data?.car) {
-        setCar(carRes.data.car ? { ...carRes.data.car } as Car : null);
-      }
-      setEditCar(false);
+      dispatch(setProfileSuccess('Данные автомобиля сохранены'));
+      dispatch(setEditCar(false));
     } catch (err: any) {
-      setError(err.response?.data?.error || 'Ошибка сохранения автомобиля');
+      const msg = err?.data?.error ?? err?.error ?? 'Ошибка сохранения автомобиля';
+      dispatch(setProfileError(typeof msg === 'string' ? msg : 'Ошибка сохранения автомобиля'));
     }
-    setSavingCar(false);
+    dispatch(setSavingCar(false));
   };
 
   const handleCancelCar = () => {
     if (car) {
-      setAutoNumber(car.auto_number || '');
-      setMark(car.mark || '');
-      setColor(car.color || '');
-      setSelectedVehicleType(car.type || 'sedan');
-      setNotes(car.notes || '');
+      dispatch(setAutoNumber(car.auto_number || ''));
+      dispatch(setMark(car.mark || ''));
+      dispatch(setColor(car.color || ''));
+      dispatch(setSelectedVehicleType(car.type || 'sedan'));
+      dispatch(setNotes(car.notes || ''));
     } else {
-      setAutoNumber('');
-      setMark('');
-      setColor('');
-      setSelectedVehicleType('sedan');
-      setNotes('');
+      dispatch(setAutoNumber(''));
+      dispatch(setMark(''));
+      dispatch(setColor(''));
+      dispatch(setSelectedVehicleType('sedan'));
+      dispatch(setNotes(''));
     }
-    setEditCar(false);
+    dispatch(setEditCar(false));
   };
 
   const handleSavePassword = async (e: React.FormEvent) => {
     e.preventDefault();
     if (newPassword.length < 6) {
-      setError('Новый пароль не менее 6 символов');
+      dispatch(setProfileError('Новый пароль не менее 6 символов'));
       return;
     }
     if (newPassword !== confirmPassword) {
-      setError('Пароли не совпадают');
+      dispatch(setProfileError('Пароли не совпадают'));
       return;
     }
-    setError('');
-    setSuccess('');
-    setSavingPassword(true);
+    dispatch(clearMessages());
+    dispatch(setSavingPassword(true));
     try {
-      await authAPI.updatePassword({ currentPassword, newPassword });
-      setSuccess('Пароль успешно изменён');
-      setCurrentPassword('');
-      setNewPassword('');
-      setConfirmPassword('');
-      setEditPassword(false);
+      await updatePassword({ currentPassword, newPassword }).unwrap();
+      dispatch(setProfileSuccess('Пароль успешно изменён'));
+      dispatch(setCurrentPassword(''));
+      dispatch(setNewPassword(''));
+      dispatch(setConfirmPassword(''));
+      dispatch(setEditPassword(false));
     } catch (err: any) {
-      setError(err.response?.data?.error || 'Ошибка смены пароля');
+      const msg = err?.data?.error ?? err?.error ?? 'Ошибка смены пароля';
+      dispatch(setProfileError(typeof msg === 'string' ? msg : 'Ошибка смены пароля'));
     }
-    setSavingPassword(false);
+    dispatch(setSavingPassword(false));
   };
 
   const handleCancelPassword = () => {
-    setCurrentPassword('');
-    setNewPassword('');
-    setConfirmPassword('');
-    setEditPassword(false);
+    dispatch(setCurrentPassword(''));
+    dispatch(setNewPassword(''));
+    dispatch(setConfirmPassword(''));
+    dispatch(setEditPassword(false));
   };
 
   if (loadingUser) {
@@ -318,7 +330,7 @@ const Profile: React.FC = () => {
                 <button
                   type="button"
                   className="btn-icon"
-                  onClick={() => { setEditCar(false); setEditProfile(true); }}
+                  onClick={() => { dispatch(setEditCar(false)); dispatch(setEditProfile(true)); }}
                   title="Редактировать"
                   aria-label="Редактировать"
                 >
@@ -343,7 +355,7 @@ const Profile: React.FC = () => {
                 <button
                   type="button"
                   className="btn-icon"
-                  onClick={() => { setEditProfile(false); setEditCar(true); }}
+                  onClick={() => { dispatch(setEditProfile(false)); dispatch(setEditCar(true)); }}
                   title="Редактировать"
                   aria-label="Редактировать"
                 >
@@ -382,7 +394,7 @@ const Profile: React.FC = () => {
                 <button
                   type="button"
                   className="btn-icon"
-                  onClick={() => { setEditProfile(false); setEditCar(false); setEditPassword(true); }}
+                  onClick={() => { dispatch(setEditProfile(false)); dispatch(setEditCar(false)); dispatch(setEditPassword(true)); }}
                   title="Изменить пароль"
                   aria-label="Изменить пароль"
                 >
@@ -423,7 +435,7 @@ const Profile: React.FC = () => {
                     <input
                       type="password"
                       value={currentPassword}
-                      onChange={(e) => setCurrentPassword(e.target.value)}
+                      onChange={(e) => dispatch(setCurrentPassword(e.target.value))}
                       placeholder="Введите текущий пароль"
                       className="form-input"
                       autoComplete="current-password"
@@ -434,7 +446,7 @@ const Profile: React.FC = () => {
                     <input
                       type="password"
                       value={newPassword}
-                      onChange={(e) => setNewPassword(e.target.value)}
+                      onChange={(e) => dispatch(setNewPassword(e.target.value))}
                       placeholder="Не менее 6 символов"
                       className="form-input"
                       autoComplete="new-password"
@@ -445,7 +457,7 @@ const Profile: React.FC = () => {
                     <input
                       type="password"
                       value={confirmPassword}
-                      onChange={(e) => setConfirmPassword(e.target.value)}
+                      onChange={(e) => dispatch(setConfirmPassword(e.target.value))}
                       placeholder="Повторите новый пароль"
                       className="form-input"
                       autoComplete="new-password"
@@ -472,7 +484,7 @@ const Profile: React.FC = () => {
                     <input
                       type="text"
                       value={name}
-                      onChange={(e) => setName(e.target.value)}
+                      onChange={(e) => dispatch(setName(e.target.value))}
                       placeholder="Ваше имя"
                       className="form-input"
                     />
@@ -505,7 +517,7 @@ const Profile: React.FC = () => {
                           key={type.id}
                           type="button"
                           className={`vehicle-type-btn ${selectedVehicleType === type.id ? 'selected' : ''}`}
-                          onClick={() => setSelectedVehicleType(type.id)}
+                          onClick={() => dispatch(setSelectedVehicleType(type.id))}
                         >
                           <span className="vehicle-icon">{type.icon}</span>
                           {type.label}
@@ -518,7 +530,7 @@ const Profile: React.FC = () => {
                     <input
                       type="text"
                       value={autoNumber}
-                      onChange={(e) => setAutoNumber(e.target.value.toUpperCase())}
+                      onChange={(e) => dispatch(setAutoNumber(e.target.value.toUpperCase()))}
                       placeholder="А123ВС"
                       className="form-input"
                     />
@@ -529,7 +541,7 @@ const Profile: React.FC = () => {
                       <input
                         type="text"
                         value={mark}
-                        onChange={(e) => setMark(e.target.value)}
+                        onChange={(e) => dispatch(setMark(e.target.value))}
                         placeholder="Toyota Camry"
                         className="form-input"
                       />
@@ -539,7 +551,7 @@ const Profile: React.FC = () => {
                       <input
                         type="text"
                         value={color}
-                        onChange={(e) => setColor(e.target.value)}
+                        onChange={(e) => dispatch(setColor(e.target.value))}
                         placeholder="Черный"
                         className="form-input"
                       />
@@ -549,7 +561,7 @@ const Profile: React.FC = () => {
                     <label>Заметки</label>
                     <textarea
                       value={notes}
-                      onChange={(e) => setNotes(e.target.value)}
+                      onChange={(e) => dispatch(setNotes(e.target.value))}
                       placeholder="Дополнительно"
                       rows={2}
                       className="form-input form-textarea"

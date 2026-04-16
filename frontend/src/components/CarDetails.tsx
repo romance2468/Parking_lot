@@ -1,24 +1,39 @@
-import React, { useState, useEffect } from 'react';
+import React, { useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { carAPI } from '../api';
+import { useCreateCarMutation } from '../store/parkingApi';
+import { useAppDispatch, useAppSelector } from '../store/hooks';
+import {
+  setLicensePlate,
+  setCarModel,
+  setCarColor,
+  setSelectedVehicleType,
+  setAdditionalNotes,
+  setAgreeToTerms,
+  setError,
+  setIsSubmitting,
+  setCarDetailsBubbles,
+} from '../store/slices/carDetailsSlice';
+import { generateBubbles } from '../store/bubbles';
 
 const CarDetails: React.FC = () => {
   const navigate = useNavigate();
   const location = useLocation();
+  const dispatch = useAppDispatch();
   const state = location.state as { fromRegister?: boolean; token?: string; refreshToken?: string; userId?: number } | undefined;
-  
-  // Form state
-  const [licensePlate, setLicensePlate] = useState('');
-  const [carModel, setCarModel] = useState('');
-  const [carColor, setCarColor] = useState('');
-  const [selectedVehicleType, setSelectedVehicleType] = useState('sedan');
-  const [additionalNotes, setAdditionalNotes] = useState('');
-  const [agreeToTerms, setAgreeToTerms] = useState(false);
-  const [error, setError] = useState('');
-  const [isSubmitting, setIsSubmitting] = useState(false);
 
-  // Create bubbles (same as login page)
-  const [bubbles, setBubbles] = useState<Array<{ id: number; size: number; left: number; duration: number; delay: number }>>([]);
+  const {
+    licensePlate,
+    carModel,
+    carColor,
+    selectedVehicleType,
+    additionalNotes,
+    agreeToTerms,
+    error,
+    isSubmitting,
+    bubbles,
+  } = useAppSelector((s) => s.carDetails);
+
+  const [createCar] = useCreateCarMutation();
 
   useEffect(() => {
     if (state?.token) {
@@ -30,18 +45,8 @@ const CarDetails: React.FC = () => {
   }, [state?.token, state?.refreshToken]);
 
   useEffect(() => {
-    const newBubbles = [];
-    for (let i = 0; i < 40; i++) {
-      newBubbles.push({
-        id: i,
-        size: Math.random() * 50 + 25,
-        left: Math.random() * 100,
-        duration: Math.random() * 25 + 20,
-        delay: Math.random() * 8
-      });
-    }
-    setBubbles(newBubbles);
-  }, []);
+    dispatch(setCarDetailsBubbles(generateBubbles()));
+  }, [dispatch]);
 
   const vehicleTypes = [
     { id: 'sedan', label: 'Седан', icon: '🚗' },
@@ -54,17 +59,17 @@ const CarDetails: React.FC = () => {
     e.preventDefault();
 
     if (!licensePlate.trim()) {
-      setError('Пожалуйста, введите номер автомобиля');
+      dispatch(setError('Пожалуйста, введите номер автомобиля'));
       return;
     }
 
     if (!agreeToTerms) {
-      setError('Пожалуйста, согласитесь с условиями');
+      dispatch(setError('Пожалуйста, согласитесь с условиями'));
       return;
     }
 
-    setError('');
-    setIsSubmitting(true);
+    dispatch(setError(''));
+    dispatch(setIsSubmitting(true));
 
     const carDetails = {
       licensePlate,
@@ -72,32 +77,33 @@ const CarDetails: React.FC = () => {
       carColor,
       vehicleType: selectedVehicleType,
       additionalNotes,
-      entryTime: new Date().toISOString()
+      entryTime: new Date().toISOString(),
     };
     localStorage.setItem('carDetails', JSON.stringify(carDetails));
 
     const token = localStorage.getItem('token');
     if (token) {
       try {
-        const res = await carAPI.createCar({
+        const res = await createCar({
           autoNumber: licensePlate.trim(),
           type: selectedVehicleType,
           mark: carModel.trim(),
           color: carColor.trim(),
-          notes: additionalNotes.trim()
-        });
-        setIsSubmitting(false);
-        const savedCar = res.data?.car;
+          notes: additionalNotes.trim(),
+        }).unwrap();
+        dispatch(setIsSubmitting(false));
+        const savedCar = res?.car;
         navigate('/parking-selection', { state: savedCar ? { car: savedCar } : undefined });
         return;
       } catch (err: any) {
-        setError(err.response?.data?.error || err.message || 'Ошибка сохранения автомобиля');
-        setIsSubmitting(false);
+        const msg = err?.data?.error ?? err?.error ?? err?.message ?? 'Ошибка сохранения автомобиля';
+        dispatch(setError(typeof msg === 'string' ? msg : 'Ошибка сохранения автомобиля'));
+        dispatch(setIsSubmitting(false));
         return;
       }
     }
 
-    setIsSubmitting(false);
+    dispatch(setIsSubmitting(false));
     navigate('/parking-selection');
   };
 
@@ -160,7 +166,7 @@ const CarDetails: React.FC = () => {
                     key={type.id}
                     type="button"
                     className={`vehicle-type-btn ${selectedVehicleType === type.id ? 'selected' : ''}`}
-                    onClick={() => setSelectedVehicleType(type.id)}
+                    onClick={() => dispatch(setSelectedVehicleType(type.id))}
                   >
                     <span className="vehicle-icon">{type.icon}</span>
                     {type.label}
@@ -175,7 +181,7 @@ const CarDetails: React.FC = () => {
               <input
                 type="text"
                 value={licensePlate}
-                onChange={(e) => setLicensePlate(e.target.value.toUpperCase())}
+                onChange={(e) => dispatch(setLicensePlate(e.target.value.toUpperCase()))}
                 placeholder="А123ВС"
                 className="form-input"
                 required
@@ -189,7 +195,7 @@ const CarDetails: React.FC = () => {
                 <input
                   type="text"
                   value={carModel}
-                  onChange={(e) => setCarModel(e.target.value)}
+                  onChange={(e) => dispatch(setCarModel(e.target.value))}
                   placeholder="Toyota Camry"
                   className="form-input"
                 />
@@ -200,7 +206,7 @@ const CarDetails: React.FC = () => {
                 <input
                   type="text"
                   value={carColor}
-                  onChange={(e) => setCarColor(e.target.value)}
+                  onChange={(e) => dispatch(setCarColor(e.target.value))}
                   placeholder="Черный"
                   className="form-input"
                 />
@@ -212,7 +218,7 @@ const CarDetails: React.FC = () => {
               <label>Дополнительные заметки</label>
               <textarea
                 value={additionalNotes}
-                onChange={(e) => setAdditionalNotes(e.target.value)}
+                onChange={(e) => dispatch(setAdditionalNotes(e.target.value))}
                 placeholder="Особые пожелания, нужна зарядка для электромобиля и т.д."
                 rows={3}
                 className="form-textarea"
@@ -225,7 +231,7 @@ const CarDetails: React.FC = () => {
                 <input
                   type="checkbox"
                   checked={agreeToTerms}
-                  onChange={(e) => setAgreeToTerms(e.target.checked)}
+                  onChange={(e) => dispatch(setAgreeToTerms(e.target.checked))}
                 />
                 <span>
                   Я согласен с{' '}

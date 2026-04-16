@@ -1,14 +1,29 @@
-import React, { useState } from 'react';
+import React, { useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { authAPI } from '../api';
+import { useLogoutMutation } from '../store/parkingApi';
+import { useAppDispatch, useAppSelector } from '../store/hooks';
+import { setLoggedIn, syncAuthFromStorage } from '../store/slices/landingSlice';
 
 const LandingPage: React.FC = () => {
   const navigate = useNavigate();
-  const [isLoggedIn, setIsLoggedIn] = useState(() => !!localStorage.getItem('token'));
+  const dispatch = useAppDispatch();
+  const isLoggedIn = useAppSelector((s) => s.landing.isLoggedIn);
+  const [logoutMut] = useLogoutMutation();
+
+  useEffect(() => {
+    dispatch(syncAuthFromStorage());
+  }, [dispatch]);
 
   const handleLogout = async () => {
-    await authAPI.logout();
-    setIsLoggedIn(false);
+    try {
+      await logoutMut().unwrap();
+    } catch {
+      /* сеть / 401 — всё равно чистим локально */
+    }
+    localStorage.removeItem('token');
+    localStorage.removeItem('refreshToken');
+    localStorage.removeItem('user');
+    dispatch(setLoggedIn(false));
   };
 
   return (

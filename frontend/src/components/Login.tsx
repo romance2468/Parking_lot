@@ -1,60 +1,53 @@
-import React, { useState, useEffect } from 'react';
+import React, { useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { authAPI } from '../api';
 import { LoginCredentials } from '../types';
+import { useLoginMutation } from '../store/parkingApi';
+import { useAppDispatch, useAppSelector } from '../store/hooks';
+import {
+  setEmail,
+  setPassword,
+  setError,
+  setRememberMe,
+  setLoading,
+  setLoginSuccess,
+  setBubbles,
+  hydrateRememberedEmail,
+} from '../store/slices/loginSlice';
+import { setLoggedIn } from '../store/slices/landingSlice';
+import { generateBubbles } from '../store/bubbles';
 
 const Login: React.FC = () => {
   const navigate = useNavigate();
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
-  const [error, setError] = useState('');
-  const [rememberMe, setRememberMe] = useState(false);
-  const [loading, setLoading] = useState(false);
-  const [loginSuccess, setLoginSuccess] = useState<{ token: string; refreshToken: string; user?: unknown } | null>(null);
-
-  // Create more visible bubbles
-  const [bubbles, setBubbles] = useState<Array<{ id: number; size: number; left: number; duration: number; delay: number }>>([]);
+  const dispatch = useAppDispatch();
+  const { email, password, error, rememberMe, loading, loginSuccess, bubbles } = useAppSelector((s) => s.login);
+  const [loginMut] = useLoginMutation();
 
   useEffect(() => {
-    // Generate more bubbles with better visibility
-    const newBubbles = [];
-    for (let i = 0; i < 40; i++) { // More bubbles
-      newBubbles.push({
-        id: i,
-        size: Math.random() * 50 + 25, // Bigger: 25-75px
-        left: Math.random() * 100,
-        duration: Math.random() * 25 + 20, // 20-45 seconds
-        delay: Math.random() * 8
-      });
-    }
-    setBubbles(newBubbles);
-  }, []);
+    dispatch(setBubbles(generateBubbles()));
+    dispatch(hydrateRememberedEmail());
+  }, [dispatch]);
 
-const handleSubmit = async (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    
+
     if (!email || !password) {
-      setError('Пожалуйста, заполните все поля');
+      dispatch(setError('Пожалуйста, заполните все поля'));
       return;
     }
 
-    setLoading(true);
-    setError('');
-    
-    try {
-      const credentials: LoginCredentials = {
-        email,
-        password
-      };
+    dispatch(setLoading(true));
+    dispatch(setError(''));
 
-      const response = await authAPI.login(credentials);
-      const token = response.data?.token;
-      const refreshToken = response.data?.refreshToken;
-      const userData = response.data?.user;
+    try {
+      const credentials: LoginCredentials = { email, password };
+      const response = await loginMut(credentials).unwrap();
+      const token = response?.token;
+      const refreshToken = response?.refreshToken;
+      const userData = response?.user;
 
       if (!token || !refreshToken) {
-        setError('Ошибка входа: не получены токены');
-        setLoading(false);
+        dispatch(setError('Ошибка входа: не получены токены'));
+        dispatch(setLoading(false));
         return;
       }
 
@@ -70,31 +63,23 @@ const handleSubmit = async (e: React.FormEvent) => {
         localStorage.removeItem('rememberedEmail');
       }
 
-      setLoading(false);
-      setLoginSuccess({ token, refreshToken, user: userData });
+      dispatch(setLoading(false));
+      dispatch(setLoggedIn(true));
+      dispatch(setLoginSuccess({ token, refreshToken, user: userData }));
     } catch (err: any) {
-      setLoading(false);
-      setError(err.response?.data?.error || 'Неверный email или пароль');
+      dispatch(setLoading(false));
+      const msg = err?.data?.error ?? err?.error ?? 'Неверный email или пароль';
+      dispatch(setError(typeof msg === 'string' ? msg : 'Неверный email или пароль'));
     }
   };
 
-  // Переход в профиль после успешного входа, передаём токен в state (чтобы Profile точно его получил)
   useEffect(() => {
     if (loginSuccess) {
       const { token: t, refreshToken: rt, user: u } = loginSuccess;
-      setLoginSuccess(null);
+      dispatch(setLoginSuccess(null));
       navigate('/profile', { replace: true, state: { token: t, refreshToken: rt, user: u } });
     }
-  }, [loginSuccess, navigate]);
-
-  // Load remembered email
-  useEffect(() => {
-    const remembered = localStorage.getItem('rememberedEmail');
-    if (remembered) {
-      setEmail(remembered);
-      setRememberMe(true);
-    }
-  }, []);
+  }, [loginSuccess, navigate, dispatch]);
 
   return (
     <div className="login-page">
@@ -151,7 +136,7 @@ const handleSubmit = async (e: React.FormEvent) => {
               <input
                 type="email"
                 value={email}
-                onChange={(e) => setEmail(e.target.value)}
+                onChange={(e) => dispatch(setEmail(e.target.value))}
                 placeholder="example@mail.ru"
                 required
               />
@@ -162,7 +147,7 @@ const handleSubmit = async (e: React.FormEvent) => {
               <input
                 type="password"
                 value={password}
-                onChange={(e) => setPassword(e.target.value)}
+                onChange={(e) => dispatch(setPassword(e.target.value))}
                 placeholder="••••••••"
                 required
               />
@@ -173,7 +158,7 @@ const handleSubmit = async (e: React.FormEvent) => {
                 <input
                   type="checkbox"
                   checked={rememberMe}
-                  onChange={(e) => setRememberMe(e.target.checked)}
+                  onChange={(e) => dispatch(setRememberMe(e.target.checked))}
                 />
                 <span>Запомнить меня</span>
               </label>

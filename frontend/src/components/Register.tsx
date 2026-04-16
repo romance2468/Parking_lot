@@ -1,81 +1,72 @@
-import React, { useState } from 'react';
+import React, { useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { authAPI } from '../api';
 import { RegisterData } from '../types';
+import { useRegisterMutation } from '../store/parkingApi';
+import { useAppDispatch, useAppSelector } from '../store/hooks';
+import {
+  setName,
+  setEmail,
+  setPassword,
+  setConfirmPassword,
+  setError,
+  setSuccess,
+  setLoading,
+  setRegisterBubbles,
+} from '../store/slices/registerSlice';
+import { setLoggedIn } from '../store/slices/landingSlice';
+import { generateBubbles } from '../store/bubbles';
 
 const Register: React.FC = () => {
   const navigate = useNavigate();
-  const [name, setName] = useState('');
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
-  const [confirmPassword, setConfirmPassword] = useState('');
-  const [error, setError] = useState('');
-  const [success, setSuccess] = useState(false);
-  const [loading, setLoading] = useState(false);
+  const dispatch = useAppDispatch();
+  const { name, email, password, confirmPassword, error, success, loading, bubbles } = useAppSelector((s) => s.register);
+  const [registerMut] = useRegisterMutation();
 
-  // Create bubbles (same as login page)
-  const [bubbles, setBubbles] = useState<Array<{ id: number; size: number; left: number; duration: number; delay: number }>>([]);
+  useEffect(() => {
+    dispatch(setRegisterBubbles(generateBubbles()));
+  }, [dispatch]);
 
-  React.useEffect(() => {
-    // Generate bubbles (same as login page)
-    const newBubbles = [];
-    for (let i = 0; i < 40; i++) {
-      newBubbles.push({
-        id: i,
-        size: Math.random() * 50 + 25,
-        left: Math.random() * 100,
-        duration: Math.random() * 25 + 20,
-        delay: Math.random() * 8
-      });
-    }
-    setBubbles(newBubbles);
-  }, []);
-
-const handleSubmit = async (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    
-    // Validation
+
     if (!name || !email || !password || !confirmPassword) {
-      setError('Пожалуйста, заполните все поля');
+      dispatch(setError('Пожалуйста, заполните все поля'));
       return;
     }
 
     if (password !== confirmPassword) {
-      setError('Пароли не совпадают');
+      dispatch(setError('Пароли не совпадают'));
       return;
     }
 
     if (password.length < 6) {
-      setError('Пароль должен быть не менее 6 символов');
+      dispatch(setError('Пароль должен быть не менее 6 символов'));
       return;
     }
 
-    setLoading(true);
-    setError('');
-    
+    dispatch(setLoading(true));
+    dispatch(setError(''));
+
     try {
-      const credentials: RegisterData = {
-        email,
-        password,
-        name
-      };
-      
-      const response = await authAPI.register(credentials);
-      const { token, refreshToken, user } = response.data;
+      const credentials: RegisterData = { email, password, name };
+      const response = await registerMut(credentials).unwrap();
+      const { token, refreshToken, user } = response;
       if (!token || !refreshToken || !user?.id) {
-        setError('Ошибка: не получены данные пользователя');
-        setLoading(false);
+        dispatch(setError('Ошибка: не получены данные пользователя'));
+        dispatch(setLoading(false));
         return;
       }
       localStorage.setItem('token', token);
       localStorage.setItem('refreshToken', refreshToken);
       localStorage.setItem('user', JSON.stringify(user));
-      setLoading(false);
-      setSuccess(true);
+      dispatch(setLoading(false));
+      dispatch(setSuccess(true));
+      dispatch(setLoggedIn(true));
       navigate('/car-details', { state: { fromRegister: true, token, refreshToken, userId: user.id } });
     } catch (err: any) {
-      setLoading(false);
-      setError(err.response?.data?.error || 'Ошибка регистрации');
+      dispatch(setLoading(false));
+      const msg = err?.data?.error ?? err?.error ?? 'Ошибка регистрации';
+      dispatch(setError(typeof msg === 'string' ? msg : 'Ошибка регистрации'));
     }
   };
 
@@ -141,7 +132,7 @@ const handleSubmit = async (e: React.FormEvent) => {
               <input
                 type="text"
                 value={name}
-                onChange={(e) => setName(e.target.value)}
+                onChange={(e) => dispatch(setName(e.target.value))}
                 placeholder="Введите ваше имя"
                 required
               />
@@ -152,7 +143,7 @@ const handleSubmit = async (e: React.FormEvent) => {
               <input
                 type="email"
                 value={email}
-                onChange={(e) => setEmail(e.target.value)}
+                onChange={(e) => dispatch(setEmail(e.target.value))}
                 placeholder="example@mail.ru"
                 required
               />
@@ -163,7 +154,7 @@ const handleSubmit = async (e: React.FormEvent) => {
               <input
                 type="password"
                 value={password}
-                onChange={(e) => setPassword(e.target.value)}
+                onChange={(e) => dispatch(setPassword(e.target.value))}
                 placeholder="••••••••"
                 minLength={6}
                 required
@@ -175,7 +166,7 @@ const handleSubmit = async (e: React.FormEvent) => {
               <input
                 type="password"
                 value={confirmPassword}
-                onChange={(e) => setConfirmPassword(e.target.value)}
+                onChange={(e) => dispatch(setConfirmPassword(e.target.value))}
                 placeholder="••••••••"
                 minLength={6}
                 required

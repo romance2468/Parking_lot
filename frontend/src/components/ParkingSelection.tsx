@@ -1,7 +1,24 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useEffect, useMemo } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { authAPI, parkingAPI } from '../api';
 import type { ParkingPlace } from '../types';
+import {
+  useGetPlacesQuery,
+  useGetProfileQuery,
+  useGetSelectionContextQuery,
+  useCreateBookingMutation,
+} from '../store/parkingApi';
+import { useAppDispatch, useAppSelector } from '../store/hooks';
+import {
+  setSelectedFloor,
+  setSelectedSpotId,
+  setVehicleType,
+  setDuration,
+  setShowSuccessModal,
+  setParkingSelectionError,
+  setSavingBooking,
+  setParkingSelectionBubbles,
+} from '../store/slices/parkingSelectionSlice';
+import { generateBubbles } from '../store/bubbles';
 
 type SpotDisplay = {
   id_parking: number;
@@ -39,80 +56,70 @@ function placeToSpot(place: ParkingPlace, selectedId: number | null): SpotDispla
 const ParkingSelection: React.FC = () => {
   const navigate = useNavigate();
   const location = useLocation();
-  
-  const [selectedFloor, setSelectedFloor] = useState('1');
-  const [selectedSpotId, setSelectedSpotId] = useState<number | null>(null);
-  const [vehicleType, setVehicleType] = useState('standard');
-  const [duration, setDuration] = useState('2');
-  
-  // State for success modal
-  const [showSuccessModal, setShowSuccessModal] = useState(false);
-  const [bookingDetails] = useState<any>(null);
+  const dispatch = useAppDispatch();
+  const {
+    selectedFloor,
+    selectedSpotId,
+    vehicleType,
+    duration,
+    showSuccessModal,
+    bookingDetails,
+    error,
+    savingBooking,
+    bubbles,
+  } = useAppSelector((s) => s.parkingSelection);
 
-  const [places, setPlaces] = useState<ParkingPlace[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const [savingBooking, setSavingBooking] = useState(false);
+  const token = localStorage.getItem('token');
+  const floorNum = Number(selectedFloor);
+  const {
+    data: placesData,
+    isFetching,
+    isLoading,
+    error: placesError,
+    refetch,
+  } = useGetPlacesQuery(floorNum, { skip: Number.isNaN(floorNum) });
 
-  const [bubbles, setBubbles] = useState<Array<{ id: number; size: number; left: number; duration: number; delay: number }>>([]);
+  const { data: selectionData } = useGetSelectionContextQuery(undefined, { skip: !token });
+  const { data: profileData } = useGetProfileQuery(undefined, { skip: !token });
+  const [createBooking] = useCreateBookingMutation();
 
-  const loadPlaces = useCallback((floor: number) => {
-    setLoading(true);
-    setError(null);
-    parkingAPI.getPlaces(floor)
-      .then((res) => {
-        setPlaces(res.data.places || []);
-      })
-      .catch((err) => {
-        setError(err.response?.data?.error || err.message || 'Не удалось загрузить места');
-        setPlaces([]);
-      })
-      .finally(() => setLoading(false));
-  }, []);
+  const places: ParkingPlace[] = useMemo(() => placesData?.places ?? [], [placesData]);
+  const loading = isLoading || isFetching;
 
   useEffect(() => {
-    const newBubbles = [];
-    for (let i = 0; i < 40; i++) {
-      newBubbles.push({
-        id: i,
-        size: Math.random() * 50 + 25,
-        left: Math.random() * 100,
-        duration: Math.random() * 25 + 20,
-        delay: Math.random() * 8
-      });
-    }
-    setBubbles(newBubbles);
-
+    dispatch(setParkingSelectionBubbles(generateBubbles()));
     const savedCarDetails = localStorage.getItem('carDetails');
     if (savedCarDetails) {
       try {
         JSON.parse(savedCarDetails);
       } catch (_) {}
     }
-  }, []);
+  }, [dispatch]);
 
   useEffect(() => {
     const stateCar = (location.state as { car?: { type?: string } })?.car;
     if (stateCar?.type && (String(stateCar.type).toLowerCase() === 'electric' || String(stateCar.type).toLowerCase().includes('электр'))) {
-      setVehicleType('electric');
+      dispatch(setVehicleType('electric'));
       return;
     }
-    const token = localStorage.getItem('token');
     if (!token) return;
-    authAPI.getSelectionContext()
-      .then((res) => {
-        const carType = res.data?.car?.type;
-        if (carType && (String(carType).toLowerCase() === 'electric' || String(carType).toLowerCase().includes('электр'))) {
-          setVehicleType('electric');
-        }
-      })
-      .catch(() => {});
-  }, [location.state]);
+    const carType = selectionData?.car?.type;
+    if (carType && (String(carType).toLowerCase() === 'electric' || String(carType).toLowerCase().includes('электр'))) {
+      dispatch(setVehicleType('electric'));
+    }
+  }, [location.state, selectionData, token, dispatch]);
 
   useEffect(() => {
-    loadPlaces(Number(selectedFloor));
-    setSelectedSpotId(null);
-  }, [selectedFloor, loadPlaces]);
+    dispatch(setSelectedSpotId(null));
+  }, [selectedFloor, dispatch]);
+
+  useEffect(() => {
+    if (placesError) {
+      const pe = placesError as { data?: { error?: string } };
+      const msg = pe.data?.error || 'Не удалось загрузить места';
+      dispatch(setParkingSelectionError(msg));
+    }
+  }, [placesError, dispatch]);
 
   const parkingSpots: SpotDisplay[] = places.map((p) => placeToSpot(p, selectedSpotId));
   const selectedSpot = selectedSpotId != null ? parkingSpots.find((s) => s.id_parking === selectedSpotId)?.number ?? null : null;
@@ -122,8 +129,8 @@ const ParkingSelection: React.FC = () => {
     const place = places.find((p) => p.id_parking === selectedSpotId);
     if (!place) return;
     const spot = placeToSpot(place, selectedSpotId);
-    if (spot.type !== vehicleType) setSelectedSpotId(null);
-  }, [vehicleType, selectedSpotId, places]);
+    if (spot.type !== vehicleType) dispatch(setSelectedSpotId(null));
+  }, [vehicleType, selectedSpotId, places, dispatch]);
 
   const getSpotColor = (status: string, type: string) => {
     if (status === 'selected') return '#2563eb';
@@ -154,12 +161,12 @@ const ParkingSelection: React.FC = () => {
 
   const handleSpotClick = (spot: SpotDisplay) => {
     if (isSpotSelectableForVehicle(spot)) {
-      setSelectedSpotId(spot.id_parking);
+      dispatch(setSelectedSpotId(spot.id_parking));
     }
   };
 
   const handleRefresh = () => {
-    loadPlaces(Number(selectedFloor));
+    void refetch();
   };
 
   const handleContinue = async () => {
@@ -173,36 +180,36 @@ const ParkingSelection: React.FC = () => {
     const totalPrice = pricePerHour * hours;
     const typeParking = spotData?.type || vehicleType;
 
-    setSavingBooking(true);
-    setError(null);
+    dispatch(setSavingBooking(true));
+    dispatch(setParkingSelectionError(null));
     try {
-      const profileRes = await authAPI.getProfile();
-      const userCar = profileRes.data?.car;
+      const userCar = profileData?.car;
       if (!userCar?.id) {
-        setError('Добавьте автомобиль в профиле для бронирования');
-        setSavingBooking(false);
+        dispatch(setParkingSelectionError('Добавьте автомобиль в профиле для бронирования'));
+        dispatch(setSavingBooking(false));
         return;
       }
       const timeStart = new Date();
       const timeEnd = new Date(timeStart.getTime() + hours * 60 * 60 * 1000);
-      await parkingAPI.createBooking({
+      await createBooking({
         car_id: userCar.id,
         id_parking: selectedSpotId,
         type_parking: typeParking,
         time_start: timeStart.toISOString(),
         time_end: timeEnd.toISOString(),
         price: totalPrice,
-      });
+      }).unwrap();
       navigate('/profile');
     } catch (err: any) {
-      setError(err.response?.data?.error || err.message || 'Ошибка бронирования');
+      const msg = err?.data?.error ?? err?.error ?? err?.message ?? 'Ошибка бронирования';
+      dispatch(setParkingSelectionError(typeof msg === 'string' ? msg : 'Ошибка бронирования'));
     } finally {
-      setSavingBooking(false);
+      dispatch(setSavingBooking(false));
     }
   };
 
   const closeModal = () => {
-    setShowSuccessModal(false);
+    dispatch(setShowSuccessModal(false));
   };
 
   return (
@@ -251,7 +258,7 @@ const ParkingSelection: React.FC = () => {
               <label>Этаж</label>
               <select 
                 value={selectedFloor} 
-                onChange={(e) => setSelectedFloor(e.target.value)}
+                onChange={(e) => dispatch(setSelectedFloor(e.target.value))}
                 className="filter-select"
               >
                 <option value="1">1 этаж</option>
@@ -265,7 +272,7 @@ const ParkingSelection: React.FC = () => {
               <label>Тип авто</label>
               <select 
                 value={vehicleType} 
-                onChange={(e) => setVehicleType(e.target.value)}
+                onChange={(e) => dispatch(setVehicleType(e.target.value))}
                 className="filter-select"
               >
                 <option value="standard">Стандарт</option>
@@ -278,7 +285,7 @@ const ParkingSelection: React.FC = () => {
               <label>Часов</label>
               <select 
                 value={duration} 
-                onChange={(e) => setDuration(e.target.value)}
+                onChange={(e) => dispatch(setDuration(e.target.value))}
                 className="filter-select"
               >
                 <option value="1">1 час</option>
