@@ -1,4 +1,5 @@
 import { makeAutoObservable, runInAction } from 'mobx';
+import axios from 'axios';
 import { authAPI } from '../api';
 import type { RegisterData } from '../types';
 import { generateBubbles } from '../utils/bubbles';
@@ -69,10 +70,23 @@ class RegisterStore {
       });
       return { token, refreshToken, userId: user.id };
     } catch (err: unknown) {
-      const e = err as { response?: { data?: { error?: string } } };
       runInAction(() => {
         this.loading = false;
-        this.error = e.response?.data?.error || 'Ошибка регистрации';
+        if (axios.isAxiosError(err)) {
+          const serverMsg = err.response?.data && typeof err.response.data === 'object' && 'error' in err.response.data
+            ? String((err.response.data as { error?: string }).error)
+            : '';
+          if (serverMsg) {
+            this.error = serverMsg;
+          } else if (!err.response) {
+            this.error =
+              'Нет ответа от сервера. Запустите бэкенд (обычно порт 3001) и проверьте, что в .env задан REACT_APP_API_URL=http://localhost:3001/api';
+          } else {
+            this.error = err.message || 'Ошибка регистрации';
+          }
+        } else {
+          this.error = err instanceof Error ? err.message : 'Ошибка регистрации';
+        }
       });
       return null;
     }
