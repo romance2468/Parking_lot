@@ -1,121 +1,29 @@
 import React, { useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { User, Car, BookingSession } from '../types';
-import {
-  useGetProfileQuery,
-  useGetMyBookingsQuery,
-  useUpdateProfileMutation,
-  useUpdatePasswordMutation,
-  useCreateCarMutation,
-  useUpdateCarMutation,
-} from '../store/parkingApi';
-import { useAppDispatch, useAppSelector } from '../store/hooks';
-import {
-  setProfileBubbles,
-  setProfileError,
-  setProfileSuccess,
-  setName,
-  setAutoNumber,
-  setMark,
-  setColor,
-  setSelectedVehicleType,
-  setNotes,
-  setSavingProfile,
-  setSavingCar,
-  setEditProfile,
-  setEditCar,
-  setEditPassword,
-  setCurrentPassword,
-  setNewPassword,
-  setConfirmPassword,
-  setSavingPassword,
-  hydrateFormFromProfile,
-  clearMessages,
-} from '../store/slices/profileSlice';
-import { generateBubbles } from '../store/bubbles';
+import { observer } from 'mobx-react-lite';
+import { profileStore } from '../stores/profileStore';
 
 const vehicleTypeLabels: Record<string, string> = {
   sedan: 'Седан',
   suv: 'Внедорожник',
   hatchback: 'Хэтчбек',
-  electric: 'Электро'
+  electric: 'Электро',
 };
 
-const Profile: React.FC = () => {
+const Profile: React.FC = observer(() => {
   const navigate = useNavigate();
   const location = useLocation();
-  const dispatch = useAppDispatch();
-  const {
-    bubbles,
-    error,
-    success,
-    name,
-    email,
-    autoNumber,
-    mark,
-    color,
-    selectedVehicleType,
-    notes,
-    savingProfile,
-    savingCar,
-    editProfile,
-    editCar,
-    editPassword,
-    currentPassword,
-    newPassword,
-    confirmPassword,
-    savingPassword,
-  } = useAppSelector((s) => s.profile);
-
-  const [updateProfile] = useUpdateProfileMutation();
-  const [updatePassword] = useUpdatePasswordMutation();
-  const [createCar] = useCreateCarMutation();
-  const [updateCar] = useUpdateCarMutation();
-
-  const token = localStorage.getItem('token');
-  const {
-    data: profileData,
-    isLoading: loadingUser,
-    error: profileQueryError,
-  } = useGetProfileQuery(undefined, { skip: !token });
-  const { data: bookingsData } = useGetMyBookingsQuery(undefined, { skip: !token });
-
-  const user: User | null = profileData?.user
-    ? {
-        id: profileData.user.id,
-        name: profileData.user.name,
-        email: profileData.user.email,
-        role: 'user',
-      }
-    : null;
-
-  const rawCar = profileData?.car as Record<string, unknown> | null | undefined;
-  const car: Car | null =
-    rawCar && (rawCar.id != null || rawCar.auto_number != null)
-      ? {
-          id: Number(rawCar.id),
-          user_id: Number(rawCar.user_id ?? rawCar.userId ?? 0),
-          type: String(rawCar.type ?? 'sedan'),
-          mark: String(rawCar.mark ?? ''),
-          auto_number: String(rawCar.auto_number ?? rawCar.autoNumber ?? ''),
-          color: String(rawCar.color ?? ''),
-          notes: String(rawCar.notes ?? ''),
-          created_at: String(rawCar.created_at ?? rawCar.createdAt ?? ''),
-        }
-      : null;
-
-  const sessions: BookingSession[] = bookingsData?.sessions ?? [];
 
   const vehicleTypes = [
     { id: 'sedan', label: 'Седан', icon: '🚗' },
     { id: 'suv', label: 'Внедорожник', icon: '🚙' },
     { id: 'hatchback', label: 'Хэтчбек', icon: '🚕' },
-    { id: 'electric', label: 'Электро', icon: '⚡' }
+    { id: 'electric', label: 'Электро', icon: '⚡' },
   ];
 
   useEffect(() => {
-    dispatch(setProfileBubbles(generateBubbles()));
-  }, [dispatch]);
+    profileStore.initBubbles();
+  }, []);
 
   useEffect(() => {
     const state = location.state as { token?: string; refreshToken?: string; user?: unknown } | undefined;
@@ -133,145 +41,42 @@ const Profile: React.FC = () => {
     const t = localStorage.getItem('token');
     if (!t) {
       navigate('/login');
+      return;
     }
+    void (async () => {
+      const r = await profileStore.loadProfile();
+      if (r === 'unauthorized') navigate('/login');
+    })();
   }, [navigate, location.state]);
-
-  useEffect(() => {
-    if (!profileData?.user) return;
-    const u = profileData.user;
-    const c = profileData.car;
-    dispatch(
-      hydrateFormFromProfile({
-        name: u.name,
-        email: u.email,
-        autoNumber: c?.auto_number || '',
-        mark: c?.mark || '',
-        color: c?.color || '',
-        selectedVehicleType: c?.type || 'sedan',
-        notes: c?.notes || '',
-      })
-    );
-  }, [profileData, dispatch]);
-
-  useEffect(() => {
-    if (profileData?.user) {
-      dispatch(setProfileError(''));
-      return;
-    }
-    const err = profileQueryError as { status?: number | string; data?: { error?: string } } | undefined;
-    if (err?.status === 401) {
-      navigate('/login');
-      return;
-    }
-    if (err?.data?.error) {
-      dispatch(setProfileError(String(err.data.error)));
-    }
-  }, [profileQueryError, profileData, navigate, dispatch]);
 
   const handleSaveProfile = async (e: React.FormEvent) => {
     e.preventDefault();
-    dispatch(clearMessages());
-    dispatch(setSavingProfile(true));
-    try {
-      await updateProfile({ name: name.trim() }).unwrap();
-      if (user) {
-        localStorage.setItem('user', JSON.stringify({ ...user, name: name.trim() }));
-      }
-      dispatch(setProfileSuccess('Данные профиля сохранены'));
-      dispatch(setEditProfile(false));
-    } catch (err: any) {
-      const msg = err?.data?.error ?? err?.error ?? 'Ошибка сохранения';
-      dispatch(setProfileError(typeof msg === 'string' ? msg : 'Ошибка сохранения'));
-    }
-    dispatch(setSavingProfile(false));
+    await profileStore.saveProfile();
   };
 
   const handleCancelProfile = () => {
-    if (user) dispatch(setName(user.name));
-    dispatch(setEditProfile(false));
+    profileStore.cancelProfileEdit();
   };
 
   const handleSaveCar = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!autoNumber.trim()) {
-      dispatch(setProfileError('Введите номер автомобиля'));
-      return;
-    }
-    dispatch(clearMessages());
-    dispatch(setSavingCar(true));
-    try {
-      const carData = {
-        autoNumber: autoNumber.trim(),
-        type: selectedVehicleType,
-        mark: mark.trim(),
-        color: color.trim(),
-        notes: notes.trim(),
-      };
-      if (car) {
-        await updateCar({ carId: car.id, body: carData }).unwrap();
-      } else {
-        await createCar(carData).unwrap();
-      }
-      dispatch(setProfileSuccess('Данные автомобиля сохранены'));
-      dispatch(setEditCar(false));
-    } catch (err: any) {
-      const msg = err?.data?.error ?? err?.error ?? 'Ошибка сохранения автомобиля';
-      dispatch(setProfileError(typeof msg === 'string' ? msg : 'Ошибка сохранения автомобиля'));
-    }
-    dispatch(setSavingCar(false));
+    await profileStore.saveCar();
   };
 
   const handleCancelCar = () => {
-    if (car) {
-      dispatch(setAutoNumber(car.auto_number || ''));
-      dispatch(setMark(car.mark || ''));
-      dispatch(setColor(car.color || ''));
-      dispatch(setSelectedVehicleType(car.type || 'sedan'));
-      dispatch(setNotes(car.notes || ''));
-    } else {
-      dispatch(setAutoNumber(''));
-      dispatch(setMark(''));
-      dispatch(setColor(''));
-      dispatch(setSelectedVehicleType('sedan'));
-      dispatch(setNotes(''));
-    }
-    dispatch(setEditCar(false));
+    profileStore.cancelCarEdit();
   };
 
   const handleSavePassword = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (newPassword.length < 6) {
-      dispatch(setProfileError('Новый пароль не менее 6 символов'));
-      return;
-    }
-    if (newPassword !== confirmPassword) {
-      dispatch(setProfileError('Пароли не совпадают'));
-      return;
-    }
-    dispatch(clearMessages());
-    dispatch(setSavingPassword(true));
-    try {
-      await updatePassword({ currentPassword, newPassword }).unwrap();
-      dispatch(setProfileSuccess('Пароль успешно изменён'));
-      dispatch(setCurrentPassword(''));
-      dispatch(setNewPassword(''));
-      dispatch(setConfirmPassword(''));
-      dispatch(setEditPassword(false));
-    } catch (err: any) {
-      const msg = err?.data?.error ?? err?.error ?? 'Ошибка смены пароля';
-      dispatch(setProfileError(typeof msg === 'string' ? msg : 'Ошибка смены пароля'));
-    }
-    dispatch(setSavingPassword(false));
+    await profileStore.savePassword();
   };
 
   const handleCancelPassword = () => {
-    dispatch(setCurrentPassword(''));
-    dispatch(setNewPassword(''));
-    dispatch(setConfirmPassword(''));
-    dispatch(setEditPassword(false));
+    profileStore.cancelPasswordEdit();
   };
 
-  if (loadingUser) {
+  if (profileStore.loadingUser) {
     return (
       <div className="profile-page">
         <div className="gray-bg" />
@@ -287,7 +92,7 @@ const Profile: React.FC = () => {
   return (
     <div className="profile-page">
       <div className="gray-bg">
-        {bubbles.map((bubble) => (
+        {profileStore.bubbles.map((bubble) => (
           <div
             key={bubble.id}
             className="bubble"
@@ -330,7 +135,7 @@ const Profile: React.FC = () => {
                 <button
                   type="button"
                   className="btn-icon"
-                  onClick={() => { dispatch(setEditCar(false)); dispatch(setEditProfile(true)); }}
+                  onClick={() => profileStore.openEditProfile()}
                   title="Редактировать"
                   aria-label="Редактировать"
                 >
@@ -340,11 +145,11 @@ const Profile: React.FC = () => {
               <dl className="dashboard-list">
                 <div className="dashboard-row">
                   <dt>Имя</dt>
-                  <dd>{user?.name || '—'}</dd>
+                  <dd>{profileStore.user?.name || '—'}</dd>
                 </div>
                 <div className="dashboard-row">
                   <dt>Email</dt>
-                  <dd>{email || '—'}</dd>
+                  <dd>{profileStore.email || '—'}</dd>
                 </div>
               </dl>
             </div>
@@ -355,7 +160,7 @@ const Profile: React.FC = () => {
                 <button
                   type="button"
                   className="btn-icon"
-                  onClick={() => { dispatch(setEditProfile(false)); dispatch(setEditCar(true)); }}
+                  onClick={() => profileStore.openEditCar()}
                   title="Редактировать"
                   aria-label="Редактировать"
                 >
@@ -365,24 +170,24 @@ const Profile: React.FC = () => {
               <dl className="dashboard-list">
                 <div className="dashboard-row">
                   <dt>Тип</dt>
-                  <dd>{car ? vehicleTypeLabels[car.type] || car.type : '—'}</dd>
+                  <dd>{profileStore.car ? vehicleTypeLabels[profileStore.car.type] || profileStore.car.type : '—'}</dd>
                 </div>
                 <div className="dashboard-row">
                   <dt>Номер</dt>
-                  <dd>{car?.auto_number || '—'}</dd>
+                  <dd>{profileStore.car?.auto_number || '—'}</dd>
                 </div>
                 <div className="dashboard-row">
                   <dt>Марка</dt>
-                  <dd>{car?.mark || '—'}</dd>
+                  <dd>{profileStore.car?.mark || '—'}</dd>
                 </div>
                 <div className="dashboard-row">
                   <dt>Цвет</dt>
-                  <dd>{car?.color || '—'}</dd>
+                  <dd>{profileStore.car?.color || '—'}</dd>
                 </div>
-                {(car?.notes ?? '').trim() ? (
+                {(profileStore.car?.notes ?? '').trim() ? (
                   <div className="dashboard-row">
                     <dt>Заметки</dt>
-                    <dd>{car?.notes}</dd>
+                    <dd>{profileStore.car?.notes}</dd>
                   </div>
                 ) : null}
               </dl>
@@ -394,7 +199,7 @@ const Profile: React.FC = () => {
                 <button
                   type="button"
                   className="btn-icon"
-                  onClick={() => { dispatch(setEditProfile(false)); dispatch(setEditCar(false)); dispatch(setEditPassword(true)); }}
+                  onClick={() => profileStore.openEditPassword()}
                   title="Изменить пароль"
                   aria-label="Изменить пароль"
                 >
@@ -413,20 +218,20 @@ const Profile: React.FC = () => {
 
           {/* Правая часть — форма редактирования или заглушка */}
           <main className="profile-content">
-            {error && (
+            {profileStore.error && (
               <div className="error-message">
                 <span className="error-icon">⚠️</span>
-                {error}
+                {profileStore.error}
               </div>
             )}
-            {success && (
+            {profileStore.success && (
               <div className="success-message">
                 <span className="success-icon">✓</span>
-                {success}
+                {profileStore.success}
               </div>
             )}
 
-            {editPassword && (
+            {profileStore.editPassword && (
               <div className="edit-panel">
                 <h3 className="section-title">Смена пароля</h3>
                 <form onSubmit={handleSavePassword}>
@@ -434,8 +239,8 @@ const Profile: React.FC = () => {
                     <label>Текущий пароль</label>
                     <input
                       type="password"
-                      value={currentPassword}
-                      onChange={(e) => dispatch(setCurrentPassword(e.target.value))}
+                      value={profileStore.currentPassword}
+                      onChange={(e) => profileStore.setCurrentPassword(e.target.value)}
                       placeholder="Введите текущий пароль"
                       className="form-input"
                       autoComplete="current-password"
@@ -445,8 +250,8 @@ const Profile: React.FC = () => {
                     <label>Новый пароль</label>
                     <input
                       type="password"
-                      value={newPassword}
-                      onChange={(e) => dispatch(setNewPassword(e.target.value))}
+                      value={profileStore.newPassword}
+                      onChange={(e) => profileStore.setNewPassword(e.target.value)}
                       placeholder="Не менее 6 символов"
                       className="form-input"
                       autoComplete="new-password"
@@ -456,8 +261,8 @@ const Profile: React.FC = () => {
                     <label>Подтвердите новый пароль</label>
                     <input
                       type="password"
-                      value={confirmPassword}
-                      onChange={(e) => dispatch(setConfirmPassword(e.target.value))}
+                      value={profileStore.confirmPassword}
+                      onChange={(e) => profileStore.setConfirmPassword(e.target.value)}
                       placeholder="Повторите новый пароль"
                       className="form-input"
                       autoComplete="new-password"
@@ -467,15 +272,15 @@ const Profile: React.FC = () => {
                     <button type="button" className="btn-outline" onClick={handleCancelPassword}>
                       Отмена
                     </button>
-                    <button type="submit" className="submit-btn" disabled={savingPassword}>
-                      {savingPassword ? 'Сохранение...' : 'Сохранить пароль'}
+                    <button type="submit" className="submit-btn" disabled={profileStore.savingPassword}>
+                      {profileStore.savingPassword ? 'Сохранение...' : 'Сохранить пароль'}
                     </button>
                   </div>
                 </form>
               </div>
             )}
 
-            {editProfile && (
+            {profileStore.editProfile && (
               <div className="edit-panel">
                 <h3 className="section-title">Редактирование личных данных</h3>
                 <form onSubmit={handleSaveProfile}>
@@ -483,29 +288,29 @@ const Profile: React.FC = () => {
                     <label>Имя</label>
                     <input
                       type="text"
-                      value={name}
-                      onChange={(e) => dispatch(setName(e.target.value))}
+                      value={profileStore.name}
+                      onChange={(e) => profileStore.setName(e.target.value)}
                       placeholder="Ваше имя"
                       className="form-input"
                     />
                   </div>
                   <div className="form-group">
                     <label>Email</label>
-                    <input type="email" value={email} readOnly className="form-input form-input-readonly" />
+                    <input type="email" value={profileStore.email} readOnly className="form-input form-input-readonly" />
                   </div>
                   <div className="edit-actions">
                     <button type="button" className="btn-outline" onClick={handleCancelProfile}>
                       Отмена
                     </button>
-                    <button type="submit" className="submit-btn" disabled={savingProfile}>
-                      {savingProfile ? 'Сохранение...' : 'Сохранить'}
+                    <button type="submit" className="submit-btn" disabled={profileStore.savingProfile}>
+                      {profileStore.savingProfile ? 'Сохранение...' : 'Сохранить'}
                     </button>
                   </div>
                 </form>
               </div>
             )}
 
-            {editCar && (
+            {profileStore.editCar && (
               <div className="edit-panel">
                 <h3 className="section-title">Редактирование автомобиля</h3>
                 <form onSubmit={handleSaveCar}>
@@ -516,8 +321,8 @@ const Profile: React.FC = () => {
                         <button
                           key={type.id}
                           type="button"
-                          className={`vehicle-type-btn ${selectedVehicleType === type.id ? 'selected' : ''}`}
-                          onClick={() => dispatch(setSelectedVehicleType(type.id))}
+                          className={`vehicle-type-btn ${profileStore.selectedVehicleType === type.id ? 'selected' : ''}`}
+                          onClick={() => profileStore.setSelectedVehicleType(type.id)}
                         >
                           <span className="vehicle-icon">{type.icon}</span>
                           {type.label}
@@ -529,8 +334,8 @@ const Profile: React.FC = () => {
                     <label>Номер автомобиля</label>
                     <input
                       type="text"
-                      value={autoNumber}
-                      onChange={(e) => dispatch(setAutoNumber(e.target.value.toUpperCase()))}
+                      value={profileStore.autoNumber}
+                      onChange={(e) => profileStore.setAutoNumber(e.target.value.toUpperCase())}
                       placeholder="А123ВС"
                       className="form-input"
                     />
@@ -540,8 +345,8 @@ const Profile: React.FC = () => {
                       <label>Марка</label>
                       <input
                         type="text"
-                        value={mark}
-                        onChange={(e) => dispatch(setMark(e.target.value))}
+                        value={profileStore.mark}
+                        onChange={(e) => profileStore.setMark(e.target.value)}
                         placeholder="Toyota Camry"
                         className="form-input"
                       />
@@ -550,8 +355,8 @@ const Profile: React.FC = () => {
                       <label>Цвет</label>
                       <input
                         type="text"
-                        value={color}
-                        onChange={(e) => dispatch(setColor(e.target.value))}
+                        value={profileStore.color}
+                        onChange={(e) => profileStore.setColor(e.target.value)}
                         placeholder="Черный"
                         className="form-input"
                       />
@@ -560,8 +365,8 @@ const Profile: React.FC = () => {
                   <div className="form-group">
                     <label>Заметки</label>
                     <textarea
-                      value={notes}
-                      onChange={(e) => dispatch(setNotes(e.target.value))}
+                      value={profileStore.notes}
+                      onChange={(e) => profileStore.setNotes(e.target.value)}
                       placeholder="Дополнительно"
                       rows={2}
                       className="form-input form-textarea"
@@ -571,25 +376,25 @@ const Profile: React.FC = () => {
                     <button type="button" className="btn-outline" onClick={handleCancelCar}>
                       Отмена
                     </button>
-                    <button type="submit" className="submit-btn" disabled={savingCar}>
-                      {savingCar ? 'Сохранение...' : 'Сохранить'}
+                    <button type="submit" className="submit-btn" disabled={profileStore.savingCar}>
+                      {profileStore.savingCar ? 'Сохранение...' : 'Сохранить'}
                     </button>
                   </div>
                 </form>
               </div>
             )}
 
-            {!editProfile && !editCar && !editPassword && (
+            {!profileStore.editProfile && !profileStore.editCar && !profileStore.editPassword && (
               <>
                 <div className="edit-placeholder">
                   <p>Нажмите ✏️ рядом с блоком в дашборде, чтобы отредактировать данные или пароль.</p>
                 </div>
 
                 <div className="profile-history-block">
-                  {sessions.filter(s => s.is_done_session !== 1 && new Date(s.time_end) >= new Date()).length > 0 && (
+                  {profileStore.sessions.filter(s => s.is_done_session !== 1 && new Date(s.time_end) >= new Date()).length > 0 && (
                     <div className="history-card">
                       <h3 className="history-card-title">Текущая сессия</h3>
-                      {sessions.filter(s => s.is_done_session !== 1 && new Date(s.time_end) >= new Date()).slice(0, 1).map((s) => (
+                      {profileStore.sessions.filter(s => s.is_done_session !== 1 && new Date(s.time_end) >= new Date()).slice(0, 1).map((s) => (
                         <dl key={s.id_session} className="dashboard-list">
                           <div className="dashboard-row">
                             <dt>Место</dt>
@@ -614,11 +419,11 @@ const Profile: React.FC = () => {
 
                   <div className="history-card">
                     <h3 className="history-card-title">История бронирований</h3>
-                    {sessions.length === 0 ? (
+                    {profileStore.sessions.length === 0 ? (
                       <p className="dashboard-hint">Нет бронирований</p>
                     ) : (
                       <ul className="dashboard-sessions-list">
-                        {sessions.map((s) => {
+                        {profileStore.sessions.map((s) => {
                           const isInactive = s.is_done_session === 1 || new Date(s.time_end) < new Date();
                           return (
                             <li key={s.id_session} className={`dashboard-session-item ${isInactive ? 'inactive' : 'active'}`}>
@@ -716,6 +521,6 @@ const Profile: React.FC = () => {
       `}</style>
     </div>
   );
-};
+});
 
 export default Profile;

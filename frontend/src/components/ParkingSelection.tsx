@@ -1,24 +1,9 @@
-import React, { useEffect, useMemo } from 'react';
+import React, { useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
+import { observer } from 'mobx-react-lite';
 import type { ParkingPlace } from '../types';
-import {
-  useGetPlacesQuery,
-  useGetProfileQuery,
-  useGetSelectionContextQuery,
-  useCreateBookingMutation,
-} from '../store/parkingApi';
-import { useAppDispatch, useAppSelector } from '../store/hooks';
-import {
-  setSelectedFloor,
-  setSelectedSpotId,
-  setVehicleType,
-  setDuration,
-  setShowSuccessModal,
-  setParkingSelectionError,
-  setSavingBooking,
-  setParkingSelectionBubbles,
-} from '../store/slices/parkingSelectionSlice';
-import { generateBubbles } from '../store/bubbles';
+import { authAPI, parkingAPI } from '../api';
+import { parkingSelectionStore } from '../stores/parkingSelectionStore';
 
 type SpotDisplay = {
   id_parking: number;
@@ -53,84 +38,42 @@ function placeToSpot(place: ParkingPlace, selectedId: number | null): SpotDispla
   };
 }
 
-const ParkingSelection: React.FC = () => {
+const ParkingSelection: React.FC = observer(() => {
   const navigate = useNavigate();
   const location = useLocation();
-  const dispatch = useAppDispatch();
-  const {
-    selectedFloor,
-    selectedSpotId,
-    vehicleType,
-    duration,
-    showSuccessModal,
-    bookingDetails,
-    error,
-    savingBooking,
-    bubbles,
-  } = useAppSelector((s) => s.parkingSelection);
 
-  const token = localStorage.getItem('token');
-  const floorNum = Number(selectedFloor);
-  const {
-    data: placesData,
-    isFetching,
-    isLoading,
-    error: placesError,
-    refetch,
-  } = useGetPlacesQuery(floorNum, { skip: Number.isNaN(floorNum) });
-
-  const { data: selectionData } = useGetSelectionContextQuery(undefined, { skip: !token });
-  const { data: profileData } = useGetProfileQuery(undefined, { skip: !token });
-  const [createBooking] = useCreateBookingMutation();
-
-  const places: ParkingPlace[] = useMemo(() => placesData?.places ?? [], [placesData]);
-  const loading = isLoading || isFetching;
+  const places: ParkingPlace[] = parkingSelectionStore.places;
+  const loading = parkingSelectionStore.loading;
 
   useEffect(() => {
-    dispatch(setParkingSelectionBubbles(generateBubbles()));
+    parkingSelectionStore.initBubbles();
     const savedCarDetails = localStorage.getItem('carDetails');
     if (savedCarDetails) {
       try {
         JSON.parse(savedCarDetails);
       } catch (_) {}
     }
-  }, [dispatch]);
+    void parkingSelectionStore.loadPlaces(Number(parkingSelectionStore.selectedFloor));
+  }, []);
 
   useEffect(() => {
-    const stateCar = (location.state as { car?: { type?: string } })?.car;
-    if (stateCar?.type && (String(stateCar.type).toLowerCase() === 'electric' || String(stateCar.type).toLowerCase().includes('электр'))) {
-      dispatch(setVehicleType('electric'));
-      return;
-    }
-    if (!token) return;
-    const carType = selectionData?.car?.type;
-    if (carType && (String(carType).toLowerCase() === 'electric' || String(carType).toLowerCase().includes('электр'))) {
-      dispatch(setVehicleType('electric'));
-    }
-  }, [location.state, selectionData, token, dispatch]);
+    void parkingSelectionStore.syncVehicleTypeFromContext(location.state);
+  }, [location.state]);
+
+  const parkingSpots: SpotDisplay[] = places.map((p) => placeToSpot(p, parkingSelectionStore.selectedSpotId));
+  const selectedSpot =
+    parkingSelectionStore.selectedSpotId != null
+      ? parkingSpots.find((s) => s.id_parking === parkingSelectionStore.selectedSpotId)?.number ?? null
+      : null;
 
   useEffect(() => {
-    dispatch(setSelectedSpotId(null));
-  }, [selectedFloor, dispatch]);
-
-  useEffect(() => {
-    if (placesError) {
-      const pe = placesError as { data?: { error?: string } };
-      const msg = pe.data?.error || 'Не удалось загрузить места';
-      dispatch(setParkingSelectionError(msg));
-    }
-  }, [placesError, dispatch]);
-
-  const parkingSpots: SpotDisplay[] = places.map((p) => placeToSpot(p, selectedSpotId));
-  const selectedSpot = selectedSpotId != null ? parkingSpots.find((s) => s.id_parking === selectedSpotId)?.number ?? null : null;
-
-  useEffect(() => {
-    if (selectedSpotId == null) return;
-    const place = places.find((p) => p.id_parking === selectedSpotId);
+    if (parkingSelectionStore.selectedSpotId == null) return;
+    const place = places.find((p) => p.id_parking === parkingSelectionStore.selectedSpotId);
     if (!place) return;
-    const spot = placeToSpot(place, selectedSpotId);
-    if (spot.type !== vehicleType) dispatch(setSelectedSpotId(null));
-  }, [vehicleType, selectedSpotId, places, dispatch]);
+    const spot = placeToSpot(place, parkingSelectionStore.selectedSpotId);
+    if (spot.type !== parkingSelectionStore.vehicleType) parkingSelectionStore.setSelectedSpotId(null);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- MobX store; deps via observer re-render
+  }, [places, parkingSelectionStore.vehicleType, parkingSelectionStore.selectedSpotId]);
 
   const getSpotColor = (status: string, type: string) => {
     if (status === 'selected') return '#2563eb';
@@ -157,66 +100,67 @@ const ParkingSelection: React.FC = () => {
   };
 
   const isSpotSelectableForVehicle = (spot: SpotDisplay) =>
-    spot.status === 'available' && spot.type === vehicleType;
+    spot.status === 'available' && spot.type === parkingSelectionStore.vehicleType;
 
   const handleSpotClick = (spot: SpotDisplay) => {
     if (isSpotSelectableForVehicle(spot)) {
-      dispatch(setSelectedSpotId(spot.id_parking));
+      parkingSelectionStore.setSelectedSpotId(spot.id_parking);
     }
   };
 
   const handleRefresh = () => {
-    void refetch();
+    void parkingSelectionStore.loadPlaces(Number(parkingSelectionStore.selectedFloor));
   };
 
   const handleContinue = async () => {
-    if (selectedSpotId == null || !selectedSpot) {
+    if (parkingSelectionStore.selectedSpotId == null || !selectedSpot) {
       alert('Пожалуйста, выберите место');
       return;
     }
-    const spotData = parkingSpots.find((s) => s.id_parking === selectedSpotId);
+    const spotData = parkingSpots.find((s) => s.id_parking === parkingSelectionStore.selectedSpotId);
     const pricePerHour = spotData?.price ?? 150;
-    const hours = Number(duration) || 1;
+    const hours = Number(parkingSelectionStore.duration) || 1;
     const totalPrice = pricePerHour * hours;
-    const typeParking = spotData?.type || vehicleType;
+    const typeParking = spotData?.type || parkingSelectionStore.vehicleType;
 
-    dispatch(setSavingBooking(true));
-    dispatch(setParkingSelectionError(null));
+    parkingSelectionStore.setSavingBooking(true);
+    parkingSelectionStore.setParkingError(null);
     try {
-      const userCar = profileData?.car;
+      const profileRes = await authAPI.getProfile();
+      const userCar = profileRes.data?.car;
       if (!userCar?.id) {
-        dispatch(setParkingSelectionError('Добавьте автомобиль в профиле для бронирования'));
-        dispatch(setSavingBooking(false));
+        parkingSelectionStore.setParkingError('Добавьте автомобиль в профиле для бронирования');
+        parkingSelectionStore.setSavingBooking(false);
         return;
       }
       const timeStart = new Date();
       const timeEnd = new Date(timeStart.getTime() + hours * 60 * 60 * 1000);
-      await createBooking({
+      await parkingAPI.createBooking({
         car_id: userCar.id,
-        id_parking: selectedSpotId,
+        id_parking: parkingSelectionStore.selectedSpotId,
         type_parking: typeParking,
         time_start: timeStart.toISOString(),
         time_end: timeEnd.toISOString(),
         price: totalPrice,
-      }).unwrap();
+      });
       navigate('/profile');
-    } catch (err: any) {
-      const msg = err?.data?.error ?? err?.error ?? err?.message ?? 'Ошибка бронирования';
-      dispatch(setParkingSelectionError(typeof msg === 'string' ? msg : 'Ошибка бронирования'));
+    } catch (err: unknown) {
+      const e = err as { response?: { data?: { error?: string } }; message?: string };
+      parkingSelectionStore.setParkingError(e.response?.data?.error || e.message || 'Ошибка бронирования');
     } finally {
-      dispatch(setSavingBooking(false));
+      parkingSelectionStore.setSavingBooking(false);
     }
   };
 
   const closeModal = () => {
-    dispatch(setShowSuccessModal(false));
+    parkingSelectionStore.setShowSuccessModal(false);
   };
 
   return (
     <div className="parking-selection-page">
       {/* Background with bubbles */}
       <div className="gray-bg">
-        {bubbles.map((bubble) => (
+        {parkingSelectionStore.bubbles.map((bubble) => (
           <div
             key={bubble.id}
             className="bubble"
@@ -257,8 +201,8 @@ const ParkingSelection: React.FC = () => {
             <div className="filter-group">
               <label>Этаж</label>
               <select 
-                value={selectedFloor} 
-                onChange={(e) => dispatch(setSelectedFloor(e.target.value))}
+                value={parkingSelectionStore.selectedFloor} 
+                onChange={(e) => parkingSelectionStore.setSelectedFloor(e.target.value)}
                 className="filter-select"
               >
                 <option value="1">1 этаж</option>
@@ -271,8 +215,8 @@ const ParkingSelection: React.FC = () => {
             <div className="filter-group">
               <label>Тип авто</label>
               <select 
-                value={vehicleType} 
-                onChange={(e) => dispatch(setVehicleType(e.target.value))}
+                value={parkingSelectionStore.vehicleType} 
+                onChange={(e) => parkingSelectionStore.setVehicleType(e.target.value)}
                 className="filter-select"
               >
                 <option value="standard">Стандарт</option>
@@ -284,8 +228,8 @@ const ParkingSelection: React.FC = () => {
             <div className="filter-group">
               <label>Часов</label>
               <select 
-                value={duration} 
-                onChange={(e) => dispatch(setDuration(e.target.value))}
+                value={parkingSelectionStore.duration} 
+                onChange={(e) => parkingSelectionStore.setDuration(e.target.value)}
                 className="filter-select"
               >
                 <option value="1">1 час</option>
@@ -300,9 +244,9 @@ const ParkingSelection: React.FC = () => {
             </div>
           </div>
 
-          {error && (
+          {parkingSelectionStore.error && (
             <div className="error-message" style={{ color: '#dc2626', marginBottom: '12px' }}>
-              {error}
+              {parkingSelectionStore.error}
             </div>
           )}
 
@@ -368,7 +312,7 @@ const ParkingSelection: React.FC = () => {
                         const spot = parkingSpots.find(s => s.number === `${row}${spotNum.toString().padStart(2, '0')}`);
                         if (!spot) return <div key={`${row}-${spotNum}`} className="parking-spot disabled" style={{ backgroundColor: '#e2e8f0', border: '1px dashed #cbd5e1' }} />;
                         const selectable = isSpotSelectableForVehicle(spot);
-                        const availableButWrongType = spot.status === 'available' && spot.type !== vehicleType;
+                        const availableButWrongType = spot.status === 'available' && spot.type !== parkingSelectionStore.vehicleType;
                         return (
                           <div
                             key={`${row}${spotNum}`}
@@ -380,7 +324,7 @@ const ParkingSelection: React.FC = () => {
                               opacity: availableButWrongType ? 0.55 : 1
                             }}
                             onClick={() => handleSpotClick(spot)}
-                            title={availableButWrongType ? `Место для типа «${spot.type === 'electric' ? 'Электромобиль' : spot.type === 'handicap' ? 'Для инвалидов' : 'Стандарт'}». Выбран тип «${vehicleType === 'electric' ? 'Электромобиль' : vehicleType === 'handicap' ? 'Для инвалидов' : 'Стандарт'}».` : undefined}
+                            title={availableButWrongType ? `Место для типа «${spot.type === 'electric' ? 'Электромобиль' : spot.type === 'handicap' ? 'Для инвалидов' : 'Стандарт'}». Выбран тип «${parkingSelectionStore.vehicleType === 'electric' ? 'Электромобиль' : parkingSelectionStore.vehicleType === 'handicap' ? 'Для инвалидов' : 'Стандарт'}».` : undefined}
                           >
                             <span className="spot-number">{spot.number}</span>
                             {spot.type === 'electric' && <span className="spot-icon">⚡</span>}
@@ -399,13 +343,13 @@ const ParkingSelection: React.FC = () => {
           {selectedSpot && (
             <div className="selected-info">
               <div className="selected-spot">
-                Выбрано место: <strong>{selectedSpot}</strong> ({selectedFloor} этаж)
+                Выбрано место: <strong>{selectedSpot}</strong> ({parkingSelectionStore.selectedFloor} этаж)
               </div>
               <div className="selected-price">
                 {(() => {
                   const spotData = parkingSpots.find(s => s.number === selectedSpot);
                   const pricePerHour = spotData?.price ?? 150;
-                  const hours = Number(duration) || 1;
+                  const hours = Number(parkingSelectionStore.duration) || 1;
                   const total = pricePerHour * hours;
                   return (
                     <>
@@ -431,16 +375,16 @@ const ParkingSelection: React.FC = () => {
               type="button"
               onClick={handleContinue}
               className="btn btn-primary"
-              disabled={!selectedSpot || savingBooking}
+              disabled={!selectedSpot || parkingSelectionStore.savingBooking}
             >
-              {savingBooking ? 'Сохранение…' : 'Продолжить'}
+              {parkingSelectionStore.savingBooking ? 'Сохранение…' : 'Продолжить'}
             </button>
           </div>
         </div>
       </div>
 
       {/* Success Modal */}
-      {showSuccessModal && bookingDetails && (
+      {parkingSelectionStore.showSuccessModal && parkingSelectionStore.bookingDetails && (
         <div className="modal-overlay">
           <div className="modal-container">
             <div className="modal-content">
@@ -453,42 +397,42 @@ const ParkingSelection: React.FC = () => {
                 <div className="booking-details">
                   <div className="detail-row">
                     <span className="detail-label">Номер брони:</span>
-                    <span className="detail-value booking-id">{bookingDetails.bookingId}</span>
+                    <span className="detail-value booking-id">{parkingSelectionStore.bookingDetails?.bookingId}</span>
                   </div>
                   
                   <div className="detail-row">
                     <span className="detail-label">Место:</span>
-                    <span className="detail-value highlight">{bookingDetails.spotNumber}</span>
+                    <span className="detail-value highlight">{parkingSelectionStore.bookingDetails?.spotNumber}</span>
                   </div>
                   
                   <div className="detail-row">
                     <span className="detail-label">Этаж:</span>
-                    <span className="detail-value">{bookingDetails.floor}</span>
+                    <span className="detail-value">{parkingSelectionStore.bookingDetails?.floor}</span>
                   </div>
                   
                   <div className="detail-row">
                     <span className="detail-label">Длительность:</span>
-                    <span className="detail-value">{bookingDetails.durationText}</span>
+                    <span className="detail-value">{parkingSelectionStore.bookingDetails?.durationText}</span>
                   </div>
                   
                   <div className="detail-row">
                     <span className="detail-label">Автомобиль:</span>
-                    <span className="detail-value">{bookingDetails.licensePlate}</span>
+                    <span className="detail-value">{parkingSelectionStore.bookingDetails?.licensePlate}</span>
                   </div>
                   
                   <div className="detail-row">
                     <span className="detail-label">Модель:</span>
-                    <span className="detail-value">{bookingDetails.carModel}</span>
+                    <span className="detail-value">{parkingSelectionStore.bookingDetails?.carModel}</span>
                   </div>
                   
                   <div className="detail-row">
                     <span className="detail-label">Время входа:</span>
-                    <span className="detail-value">{bookingDetails.entryTime}</span>
+                    <span className="detail-value">{parkingSelectionStore.bookingDetails?.entryTime}</span>
                   </div>
                   
                   <div className="detail-row total-row">
                     <span className="detail-label">К оплате:</span>
-                    <span className="detail-value total-price">{bookingDetails.totalPrice} ₽</span>
+                    <span className="detail-value total-price">{parkingSelectionStore.bookingDetails?.totalPrice} ₽</span>
                   </div>
                 </div>
                 
@@ -1172,6 +1116,6 @@ const ParkingSelection: React.FC = () => {
       `}</style>
     </div>
   );
-};
+});
 
 export default ParkingSelection;

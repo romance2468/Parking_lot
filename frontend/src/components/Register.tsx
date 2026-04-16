@@ -1,72 +1,18 @@
-import React, { useEffect } from 'react';
+import React from 'react';
 import { useNavigate } from 'react-router-dom';
-import { RegisterData } from '../types';
-import { useRegisterMutation } from '../store/parkingApi';
-import { useAppDispatch, useAppSelector } from '../store/hooks';
-import {
-  setName,
-  setEmail,
-  setPassword,
-  setConfirmPassword,
-  setError,
-  setSuccess,
-  setLoading,
-  setRegisterBubbles,
-} from '../store/slices/registerSlice';
-import { setLoggedIn } from '../store/slices/landingSlice';
-import { generateBubbles } from '../store/bubbles';
+import { observer } from 'mobx-react-lite';
+import { registerStore } from '../stores/registerStore';
+import { landingStore } from '../stores/landingStore';
 
-const Register: React.FC = () => {
+const Register: React.FC = observer(() => {
   const navigate = useNavigate();
-  const dispatch = useAppDispatch();
-  const { name, email, password, confirmPassword, error, success, loading, bubbles } = useAppSelector((s) => s.register);
-  const [registerMut] = useRegisterMutation();
-
-  useEffect(() => {
-    dispatch(setRegisterBubbles(generateBubbles()));
-  }, [dispatch]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-
-    if (!name || !email || !password || !confirmPassword) {
-      dispatch(setError('Пожалуйста, заполните все поля'));
-      return;
-    }
-
-    if (password !== confirmPassword) {
-      dispatch(setError('Пароли не совпадают'));
-      return;
-    }
-
-    if (password.length < 6) {
-      dispatch(setError('Пароль должен быть не менее 6 символов'));
-      return;
-    }
-
-    dispatch(setLoading(true));
-    dispatch(setError(''));
-
-    try {
-      const credentials: RegisterData = { email, password, name };
-      const response = await registerMut(credentials).unwrap();
-      const { token, refreshToken, user } = response;
-      if (!token || !refreshToken || !user?.id) {
-        dispatch(setError('Ошибка: не получены данные пользователя'));
-        dispatch(setLoading(false));
-        return;
-      }
-      localStorage.setItem('token', token);
-      localStorage.setItem('refreshToken', refreshToken);
-      localStorage.setItem('user', JSON.stringify(user));
-      dispatch(setLoading(false));
-      dispatch(setSuccess(true));
-      dispatch(setLoggedIn(true));
-      navigate('/car-details', { state: { fromRegister: true, token, refreshToken, userId: user.id } });
-    } catch (err: any) {
-      dispatch(setLoading(false));
-      const msg = err?.data?.error ?? err?.error ?? 'Ошибка регистрации';
-      dispatch(setError(typeof msg === 'string' ? msg : 'Ошибка регистрации'));
+    const res = await registerStore.submit();
+    if (res) {
+      landingStore.setLoggedIn(true);
+      navigate('/car-details', { state: { fromRegister: true, token: res.token, refreshToken: res.refreshToken, userId: res.userId } });
     }
   };
 
@@ -74,7 +20,7 @@ const Register: React.FC = () => {
     <div className="register-page">
       {/* Gray #8 Background with Bubbles */}
       <div className="gray-bg">
-        {bubbles.map((bubble) => (
+        {registerStore.bubbles.map((bubble) => (
           <div
             key={bubble.id}
             className="bubble"
@@ -112,14 +58,14 @@ const Register: React.FC = () => {
 
           <h2 className="register-title">Регистрация</h2>
           
-          {error && (
+          {registerStore.error && (
             <div className="error-message">
               <span className="error-icon">⚠️</span>
-              {error}
+              {registerStore.error}
             </div>
           )}
 
-          {success && (
+          {registerStore.success && (
             <div className="success-message">
               <span className="success-icon">✓</span>
               Регистрация прошла успешно! Теперь введите данные автомобиля.
@@ -131,8 +77,8 @@ const Register: React.FC = () => {
               <label>Имя</label>
               <input
                 type="text"
-                value={name}
-                onChange={(e) => dispatch(setName(e.target.value))}
+                value={registerStore.name}
+                onChange={(e) => registerStore.setName(e.target.value)}
                 placeholder="Введите ваше имя"
                 required
               />
@@ -142,8 +88,8 @@ const Register: React.FC = () => {
               <label>Электронная почта</label>
               <input
                 type="email"
-                value={email}
-                onChange={(e) => dispatch(setEmail(e.target.value))}
+                value={registerStore.email}
+                onChange={(e) => registerStore.setEmail(e.target.value)}
                 placeholder="example@mail.ru"
                 required
               />
@@ -153,8 +99,8 @@ const Register: React.FC = () => {
               <label>Пароль</label>
               <input
                 type="password"
-                value={password}
-                onChange={(e) => dispatch(setPassword(e.target.value))}
+                value={registerStore.password}
+                onChange={(e) => registerStore.setPassword(e.target.value)}
                 placeholder="••••••••"
                 minLength={6}
                 required
@@ -165,16 +111,16 @@ const Register: React.FC = () => {
               <label>Подтвердите пароль</label>
               <input
                 type="password"
-                value={confirmPassword}
-                onChange={(e) => dispatch(setConfirmPassword(e.target.value))}
+                value={registerStore.confirmPassword}
+                onChange={(e) => registerStore.setConfirmPassword(e.target.value)}
                 placeholder="••••••••"
                 minLength={6}
                 required
               />
             </div>
 
-            <button type="submit" className="register-button" disabled={success || loading}>
-              {loading ? 'Регистрация...' : success ? 'Регистрация успешна!' : 'Зарегистрироваться'}
+            <button type="submit" className="register-button" disabled={registerStore.success || registerStore.loading}>
+              {registerStore.loading ? 'Регистрация...' : registerStore.success ? 'Регистрация успешна!' : 'Зарегистрироваться'}
             </button>
           </form>
 
@@ -451,6 +397,6 @@ const Register: React.FC = () => {
       `}</style>
     </div>
   );
-};
+});
 
 export default Register;

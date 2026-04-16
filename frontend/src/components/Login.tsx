@@ -1,91 +1,28 @@
-import React, { useEffect } from 'react';
+import React from 'react';
 import { useNavigate } from 'react-router-dom';
-import { LoginCredentials } from '../types';
-import { useLoginMutation } from '../store/parkingApi';
-import { useAppDispatch, useAppSelector } from '../store/hooks';
-import {
-  setEmail,
-  setPassword,
-  setError,
-  setRememberMe,
-  setLoading,
-  setLoginSuccess,
-  setBubbles,
-  hydrateRememberedEmail,
-} from '../store/slices/loginSlice';
-import { setLoggedIn } from '../store/slices/landingSlice';
-import { generateBubbles } from '../store/bubbles';
+import { observer } from 'mobx-react-lite';
+import { loginStore } from '../stores/loginStore';
+import { landingStore } from '../stores/landingStore';
 
-const Login: React.FC = () => {
+const Login: React.FC = observer(() => {
   const navigate = useNavigate();
-  const dispatch = useAppDispatch();
-  const { email, password, error, rememberMe, loading, loginSuccess, bubbles } = useAppSelector((s) => s.login);
-  const [loginMut] = useLoginMutation();
-
-  useEffect(() => {
-    dispatch(setBubbles(generateBubbles()));
-    dispatch(hydrateRememberedEmail());
-  }, [dispatch]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-
-    if (!email || !password) {
-      dispatch(setError('Пожалуйста, заполните все поля'));
-      return;
-    }
-
-    dispatch(setLoading(true));
-    dispatch(setError(''));
-
-    try {
-      const credentials: LoginCredentials = { email, password };
-      const response = await loginMut(credentials).unwrap();
-      const token = response?.token;
-      const refreshToken = response?.refreshToken;
-      const userData = response?.user;
-
-      if (!token || !refreshToken) {
-        dispatch(setError('Ошибка входа: не получены токены'));
-        dispatch(setLoading(false));
-        return;
-      }
-
-      localStorage.setItem('token', token);
-      localStorage.setItem('refreshToken', refreshToken);
-      if (userData) {
-        localStorage.setItem('user', JSON.stringify(userData));
-      }
-
-      if (rememberMe) {
-        localStorage.setItem('rememberedEmail', email);
-      } else {
-        localStorage.removeItem('rememberedEmail');
-      }
-
-      dispatch(setLoading(false));
-      dispatch(setLoggedIn(true));
-      dispatch(setLoginSuccess({ token, refreshToken, user: userData }));
-    } catch (err: any) {
-      dispatch(setLoading(false));
-      const msg = err?.data?.error ?? err?.error ?? 'Неверный email или пароль';
-      dispatch(setError(typeof msg === 'string' ? msg : 'Неверный email или пароль'));
-    }
-  };
-
-  useEffect(() => {
-    if (loginSuccess) {
-      const { token: t, refreshToken: rt, user: u } = loginSuccess;
-      dispatch(setLoginSuccess(null));
+    await loginStore.submit();
+    if (loginStore.loginSuccess) {
+      landingStore.setLoggedIn(true);
+      const { token: t, refreshToken: rt, user: u } = loginStore.loginSuccess;
+      loginStore.clearLoginSuccess();
       navigate('/profile', { replace: true, state: { token: t, refreshToken: rt, user: u } });
     }
-  }, [loginSuccess, navigate, dispatch]);
+  };
 
   return (
     <div className="login-page">
       {/* Gray #8 Background with More Visible Bubbles */}
       <div className="gray-bg">
-        {bubbles.map((bubble) => (
+        {loginStore.bubbles.map((bubble) => (
           <div
             key={bubble.id}
             className="bubble"
@@ -123,10 +60,10 @@ const Login: React.FC = () => {
 
           <h2 className="login-title">Вход в систему</h2>
           
-          {error && (
+          {loginStore.error && (
             <div className="error-message">
               <span className="error-icon">⚠️</span>
-              {error}
+              {loginStore.error}
             </div>
           )}
 
@@ -135,8 +72,8 @@ const Login: React.FC = () => {
               <label>Электронная почта</label>
               <input
                 type="email"
-                value={email}
-                onChange={(e) => dispatch(setEmail(e.target.value))}
+                value={loginStore.email}
+                onChange={(e) => loginStore.setEmail(e.target.value)}
                 placeholder="example@mail.ru"
                 required
               />
@@ -146,8 +83,8 @@ const Login: React.FC = () => {
               <label>Пароль</label>
               <input
                 type="password"
-                value={password}
-                onChange={(e) => dispatch(setPassword(e.target.value))}
+                value={loginStore.password}
+                onChange={(e) => loginStore.setPassword(e.target.value)}
                 placeholder="••••••••"
                 required
               />
@@ -157,16 +94,16 @@ const Login: React.FC = () => {
               <label className="remember-me">
                 <input
                   type="checkbox"
-                  checked={rememberMe}
-                  onChange={(e) => dispatch(setRememberMe(e.target.checked))}
+                  checked={loginStore.rememberMe}
+                  onChange={(e) => loginStore.setRememberMe(e.target.checked)}
                 />
                 <span>Запомнить меня</span>
               </label>
               <button type="button" className="forgot-link">Забыли пароль?</button>
             </div>
 
-            <button type="submit" className="login-button" disabled={loading}>
-              {loading ? 'Вход...' : 'Войти'}
+            <button type="submit" className="login-button" disabled={loginStore.loading}>
+              {loginStore.loading ? 'Вход...' : 'Войти'}
             </button>
           </form>
 
@@ -470,6 +407,6 @@ const Login: React.FC = () => {
       `}</style>
     </div>
   );
-};
+});
 
 export default Login;
